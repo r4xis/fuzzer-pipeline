@@ -1,0 +1,22 @@
+name: Deploy to Oracle
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH and deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 79.72.66.118
+          username: opc
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          script: |
+            cd ~/fuzzer-pipeline
+            git pull origin main
+            docker build -t fuzzer-pipeline .
+            docker run --rm fuzzer-pipeline
