@@ -1,0 +1,30 @@
+# NSF magic
+magic_nsf="NESM\x1a"
+magic_nsfe="NSFE"
+
+# chip_flags — Namco OOB, DMC path'leri için kritik
+chip_vrc6="\x01"
+chip_vrc7="\x02"
+chip_fds="\x04"
+chip_mmc5="\x08"
+chip_namco="\x10"
+chip_fme7="\x20"
+chip_all="\x3f"
+chip_namco_fme7="\x30"
+chip_namco_vrc6="\x11"
+
+# play_addr validate yok — low address range
+play_addr_low="\x00\x00"
+play_addr_ram="\x00\x20"
+play_addr_apu="\x00\x40"
+
+# bank values — OOB için
+bank_max="\xff"
+bank_oob="\xfe"
+
+# DMC register — address attacker controlled
+dmc_addr_max="\xff"
+
+# Namco osc_reg[6] — wave table OOB için
+namco_wave_oob="\xe0"
+namco_wave_max="\xff"
