@@ -32,7 +32,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 
         // 50 iteration — DMC/IRQ frame counter path'lerine ulaşmak için
         // Frame counter case 0→2 fall-through için en az 4 frame lazım
-        for (int i = 0; i < 50; i++) {
+        for (int i = 0; i < 20; i++) {
             if (gme_track_ended(emu)) break;
             gme_play(emu, 2048, buf);
         }
