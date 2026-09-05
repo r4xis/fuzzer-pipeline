@@ -13,7 +13,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     if (err || !emu) return 0;
 
     // Infinite loop engeli — illegal opcode + FDS timeout fix
-    gme_set_fade(emu, 1000, 100);
+    gme_set_fade(emu, 1000);
 
     int track_count = gme_track_count(emu);
     if (track_count <= 0) {
