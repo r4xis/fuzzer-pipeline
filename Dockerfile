@@ -22,7 +22,7 @@ RUN cd /src/libgme && \
 COPY harness/fuzz_nsf.cpp /fuzzing/
 RUN afl-c++ -o /fuzzing/harness /fuzzing/fuzz_nsf.cpp \
     -lgme -lstdc++ \
-    -fsanitize=address \
+    -fsanitize=fuzzer,address \
     -fno-omit-frame-pointer
 
 VOLUME ["/data"]
