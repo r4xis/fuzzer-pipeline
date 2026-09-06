@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from typing import Optional
 """
 Runs afl-whatsup inside the fuzzing container, parses summary stats,
 and updates the current session's coverage_pct and total_execs in the DB.
@@ -30,12 +31,12 @@ def get_whatsup_output() -> str:
     return result.stdout
 
 
-def parse_coverage_pct(text: str) -> float | None:
+def parse_coverage_pct(text: str) -> Optional[float]:
     match = re.search(r"Coverage reached\s*:\s*([\d.]+)%", text)
     return float(match.group(1)) if match else None
 
 
-def parse_total_execs(text: str) -> int | None:
+def parse_total_execs(text: str) -> Optional[int]:
     """
     afl-whatsup prints totals like 'Total execs : 1 millions, 708 thousands'
     or a plain number like 'Total execs : 335 thousands'. This normalizes
