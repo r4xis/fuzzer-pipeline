@@ -3,10 +3,17 @@ FROM aflplusplus/aflplusplus:latest
 RUN apt-get update && apt-get install -y \
     cmake \
     git \
+    gdb \
+    curl \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /fuzzing
+# Install Rust and CASR for crash triage
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+RUN cargo install casr
 
+WORKDIR /fuzzing
 RUN git clone https://github.com/libgme/game-music-emu.git /src/libgme
 RUN cd /src/libgme && \
     cmake -DCMAKE_CXX_COMPILER=afl-c++ \
