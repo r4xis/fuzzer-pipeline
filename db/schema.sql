@@ -56,3 +56,5 @@ CREATE TABLE crash_targets (
 CREATE INDEX idx_crashes_visibility ON crashes(visibility);
 CREATE INDEX idx_crashes_status ON crashes(status);
 CREATE INDEX idx_crashes_input_hash ON crashes(input_hash);
+
+ALTER TABLE crashes ADD COLUMN IF NOT EXISTS source_context TEXT[];

@@ -69,6 +69,7 @@ def insert_crash(conn, session_id: int, report: dict, poc_path: Path) -> int:
     asan_summary = next(
         (line for line in asan_report if line.startswith("SUMMARY:")), ""
     )
+    source_context = report.get("Source", [])
 
     poc_sha256 = compute_file_sha256(poc_path)
     poc_size = poc_path.stat().st_size
@@ -78,9 +79,9 @@ def insert_crash(conn, session_id: int, report: dict, poc_path: Path) -> int:
             """
             INSERT INTO crashes (
                 session_id, crash_line, severity_type, severity_desc,
-                severity_explain, stacktrace, asan_summary,
+                severity_explain, stacktrace, asan_summary, source_context,
                 input_hash, poc_file_path, poc_file_size, poc_file_sha256
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (input_hash) DO NOTHING
             RETURNING id
             """,
@@ -92,6 +93,7 @@ def insert_crash(conn, session_id: int, report: dict, poc_path: Path) -> int:
                 severity.get("Explanation", ""),
                 stacktrace,
                 asan_summary,
+                source_context,
                 input_hash,
                 str(poc_path),
                 poc_size,
@@ -127,7 +129,6 @@ def main():
             print(f"  [!] Original crash file missing for {casrep_path.name}")
             continue
 
-        # Temporary placeholder path, real archive path set after we know the DB id
         crash_id = insert_crash(conn, session_id, report, original_crash)
 
         if crash_id:
