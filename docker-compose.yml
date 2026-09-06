@@ -46,3 +46,16 @@ services:
       - fuzzer0
     command: >
       sh -c "sleep 5 && afl-fuzz -t 300 -i /data/seeds_min -o /data/afl-output -S fuzzer3 -x /data/dict/nsf.dict -- /fuzzing/harness @@"
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: fuzzer-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fuzzer
+      POSTGRES_PASSWORD: XItyYpPDg8y3hHtzipBSX2ZHAVZZA2q_
+      POSTGRES_DB: fuzzer_db
+    volumes:
+      - /data/postgres:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
