@@ -4,13 +4,9 @@ RUN apt-get update && apt-get install -y \
     cmake \
     git \
     gdb \
-    curl \
-    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Rust and CASR for crash triage
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
+# CASR for crash triage - base image already has Rust/cargo installed
 RUN cargo install casr
 
 WORKDIR /fuzzing
