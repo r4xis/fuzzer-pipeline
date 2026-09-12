@@ -21,7 +21,7 @@ DB_CONFIG = {
     "password": os.environ.get("FUZZER_DB_PASSWORD", ""),
 }
 
-POC_ARCHIVE_DIR = Path("/data/poc_archive/nsf")
+POC_ARCHIVE_DIR = Path("/data/poc_archive/vgm")
 
 
 def compute_input_hash(stacktrace: list) -> str:
