@@ -4,13 +4,12 @@
 #include "gme/gme.h"
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
-    if (size < 17) return 0;  // son byte track selector için ayrılıyor
+    if (size < 0x40) return 0;
 
-    // Format kilitleme — auto-detect NSF'i HES'e kaçırıyordu, engelliyoruz
-    Music_Emu *emu = gme_new_emu(gme_nsf_type, 44100);
+    Music_Emu *emu = gme_new_emu(gme_vgm_type, 44100);
     if (!emu) return 0;
 
-    gme_err_t err = gme_load_data(emu, data, size - 1);
+    gme_err_t err = gme_load_data(emu, data, size);
     if (err) {
         gme_delete(emu);
         return 0;
@@ -24,10 +23,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         return 0;
     }
 
-    // Son byte input içinden track seç — 3 track yerine 1 track çalıştır
-    int track = data[size - 1] % track_count;
-
-    err = gme_start_track(emu, track);
+    err = gme_start_track(emu, 0);
     if (!err) {
         short buf[1024];
         for (int i = 0; i < 15; i++) {
