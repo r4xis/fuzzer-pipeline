@@ -67,7 +67,10 @@ services:
     environment:
       DB_HOST: postgres
       FUZZER_DB_PASSWORD: XItyYpPDg8y3hHtzipBSX2ZHAVZZA2q_
+    volumes:
+      - /data:/data
     depends_on:
       - postgres
     ports:
       - "127.0.0.1:8000:8000"
+
