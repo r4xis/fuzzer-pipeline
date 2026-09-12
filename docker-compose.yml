@@ -59,3 +59,15 @@ services:
       - /data/postgres:/var/lib/postgresql/data
     ports:
       - "127.0.0.1:5432:5432"
+
+  api:
+    build: ./api
+    container_name: fuzzer-api
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      FUZZER_DB_PASSWORD: XItyYpPDg8y3hHtzipBSX2ZHAVZZA2q_
+    depends_on:
+      - postgres
+    ports:
+      - "127.0.0.1:8000:8000"
