@@ -1,0 +1,1 @@
+ALTER TABLE crashes ADD COLUMN IF NOT EXISTS report_url TEXT;

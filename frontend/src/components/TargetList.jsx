@@ -1,37 +1,28 @@
-import { useEffect, useState } from "react";
-import { fetchTargets } from "../api/client";
-
-export default function TargetList({ programId, onSelect, onBack }) {
-  const [targets, setTargets] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchTargets(programId)
-      .then(setTargets)
-      .finally(() => setLoading(false));
-  }, [programId]);
-
+export default function TargetList({ program, targets, onSelect, onBack }) {
   return (
     <div>
-      <button className="back-btn" onClick={onBack}>
-        &larr; Back
-      </button>
-      {loading ? (
-        <p className="muted">Loading...</p>
-      ) : (
-        <div className="crash-list">
-          {targets.map((t) => (
-            <div
-              key={t.id}
-              className="crash-row"
-              onClick={() => onSelect(t.id)}
-            >
-              <span className="crash-target">{t.focus}</span>
-              <span className="muted">{t.harness_version}</span>
-            </div>
-          ))}
-        </div>
-      )}
+      <button className="btn-link" onClick={onBack}>← all programs</button>
+      <div className="view-header">
+        <p className="eyebrow">Program</p>
+        <h1 className="view-title mono">{program.name}</h1>
+        {program.repo_url && (
+          <p className="view-lead">
+            <a href={program.repo_url} target="_blank" rel="noreferrer">{program.repo_url}</a>
+          </p>
+        )}
+      </div>
+      <div className="section">
+        <div className="section-label">Targets</div>
+        {targets.length === 0 && <div className="empty-row">no targets registered for this program</div>}
+        {targets.map((t) => (
+          <button key={t.id} className="row-btn target-row" onClick={() => onSelect(t.id)}>
+            <span className="focus">{t.focus}</span>
+            <span className="harness">{t.harness_version || "—"}</span>
+            <span className="count">{t.latest_session_id ? `session #${t.latest_session_id}` : "no session"}</span>
+            <span className="arrow">→</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

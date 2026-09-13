@@ -13,7 +13,7 @@ app = FastAPI(title="Fuzzer Crash Triage API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-    allow_methods=["GET", "PATCH"],
+    allow_methods=["GET"],
     allow_headers=["*"],
 )
 
@@ -51,12 +51,20 @@ def list_programs():
 
 @app.get("/targets")
 def list_targets(program_id: Optional[int] = None):
-    query = "SELECT id, program_id, focus, harness_version FROM targets WHERE 1=1"
+    query = """
+        SELECT t.id, t.program_id, t.focus, t.harness_version,
+               (SELECT s.id FROM sessions s
+                WHERE s.target_id = t.id
+                ORDER BY s.started_at DESC NULLS LAST
+                LIMIT 1) AS latest_session_id
+        FROM targets t
+        WHERE 1=1
+    """
     params = []
     if program_id:
-        query += " AND program_id = %s"
+        query += " AND t.program_id = %s"
         params.append(program_id)
-    query += " ORDER BY focus"
+    query += " ORDER BY t.focus"
 
     conn = get_connection()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
@@ -122,7 +130,7 @@ def list_crashes(
 ):
     query = """
         SELECT c.id, c.crash_line, c.severity_type, c.severity_desc,
-               c.visibility, c.status, c.discovered_at,
+               c.visibility, c.status, c.discovered_at, c.report_url,
                t.focus AS target_focus, p.name AS program_name
         FROM crashes c
         LEFT JOIN sessions s ON c.session_id = s.id
@@ -132,10 +140,9 @@ def list_crashes(
     """
     params = []
 
-    if visibility:
-        query += " AND c.visibility = %s"
-        params.append(visibility)
-    else:
+    # visibility=private is the admin view and returns every row, mirroring
+    # how /crashes/{id} treats it; anything else is limited to public rows.
+    if visibility != "private":
         query += " AND c.visibility = 'public'"
 
     if status:
@@ -165,7 +172,7 @@ def get_crash(crash_id: int, visibility: Optional[str] = None):
             """
             SELECT c.id, c.crash_line, c.severity_type, c.severity_desc, c.severity_explain,
                    c.stacktrace, c.asan_summary, c.source_context, c.poc_file_size,
-                   c.poc_file_sha256, c.visibility, c.status, c.discovered_at,
+                   c.poc_file_sha256, c.visibility, c.status, c.discovered_at, c.report_url,
                    t.focus AS target_focus, p.name AS program_name
             FROM crashes c
             LEFT JOIN sessions s ON c.session_id = s.id
