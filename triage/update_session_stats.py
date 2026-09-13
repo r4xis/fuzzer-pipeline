@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from typing import Optional
+from typing import List, Optional, TypedDict
 """
 Runs afl-whatsup inside the fuzzing container, parses summary stats,
 and updates the current session's coverage_pct and total_execs in the DB.
@@ -13,6 +13,13 @@ import sys
 import os
 
 import psycopg2
+
+
+class InstanceStats(TypedDict):
+    instance_name: str
+    coverage_pct: Optional[float]
+    execs_per_sec: Optional[float]
+    crashes_saved: Optional[int]
 
 DB_CONFIG = {
     "host": "127.0.0.1",
@@ -59,6 +66,49 @@ def parse_total_execs(text: str) -> Optional[int]:
         else:
             total += int(value)
     return total if total > 0 else None
+
+
+INSTANCE_HEADER_RE = re.compile(r">>>.*?instance:\s*(\S+).*?<<<")
+INSTANCE_COVERAGE_RE = re.compile(r"coverage\s*:?\s*([\d.]+)%")
+INSTANCE_SPEED_RE = re.compile(r"lifetime speed\s+([\d.]+)\s*execs/sec")
+INSTANCE_CRASHES_RE = re.compile(r"crashes saved\s+(\d+)")
+
+
+def parse_instances(text: str) -> List[InstanceStats]:
+    """
+    afl-whatsup prints one '>>> ... instance: fuzzer0 ... <<<' block per
+    fuzzer, followed by its stats (or a "dead or running remotely" notice),
+    before the aggregate "Summary stats" section. This pulls per-instance
+    coverage/speed/crash counts out of each block.
+    """
+    summary_idx = text.find("Summary stats")
+    body = text[:summary_idx] if summary_idx != -1 else text
+
+    headers = list(INSTANCE_HEADER_RE.finditer(body))
+    instances = []
+    for i, header in enumerate(headers):
+        name = header.group(1)
+        start = header.end()
+        end = headers[i + 1].start() if i + 1 < len(headers) else len(body)
+        block = body[start:end]
+
+        coverage_match = INSTANCE_COVERAGE_RE.search(block)
+        speed_match = INSTANCE_SPEED_RE.search(block)
+        crashes_match = INSTANCE_CRASHES_RE.search(block)
+
+        if not (coverage_match and speed_match and crashes_match):
+            # e.g. "Instance is dead or running remotely, skipping."
+            continue
+
+        instances.append(
+            InstanceStats(
+                instance_name=name,
+                coverage_pct=float(coverage_match.group(1)),
+                execs_per_sec=float(speed_match.group(1)),
+                crashes_saved=int(crashes_match.group(1)),
+            )
+        )
+    return instances
 
 
 def get_or_create_session(conn, target_id: int) -> int:
@@ -109,6 +159,26 @@ def record_session_stats(conn, session_id: int, coverage_pct: float, total_execs
         conn.commit()
 
 
+def record_instance_stats(conn, session_id: int, instances: List[InstanceStats]):
+    with conn.cursor() as cur:
+        for instance in instances:
+            cur.execute(
+                """
+                INSERT INTO fuzzer_instances
+                    (session_id, instance_name, coverage_pct, execs_per_sec, crashes_saved, recorded_at)
+                VALUES (%s, %s, %s, %s, %s, now())
+                """,
+                (
+                    session_id,
+                    instance["instance_name"],
+                    instance["coverage_pct"],
+                    instance["execs_per_sec"],
+                    instance["crashes_saved"],
+                ),
+            )
+        conn.commit()
+
+
 def main():
     if len(sys.argv) != 2:
         print("Usage: update_session_stats.py <target_id>")
@@ -125,12 +195,23 @@ def main():
         print(output)
         sys.exit(1)
 
+    instances = parse_instances(output)
+
     conn = psycopg2.connect(**DB_CONFIG)
     session_id = get_or_create_session(conn, target_id)
     record_session_stats(conn, session_id, coverage_pct, total_execs)
+    record_instance_stats(conn, session_id, instances)
     conn.close()
 
     print(f"Updated session {session_id}: coverage={coverage_pct}%, execs={total_execs}")
+    for instance in instances:
+        print(
+            f"  {instance['instance_name']}: coverage={instance['coverage_pct']}%, "
+            f"speed={instance['execs_per_sec']}/sec, crashes={instance['crashes_saved']}"
+        )
+    skipped = len(INSTANCE_HEADER_RE.findall(output)) - len(instances)
+    if skipped > 0:
+        print(f"  ({skipped} instance(s) dead/unparseable, skipped)")
 
 
 if __name__ == "__main__":

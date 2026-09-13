@@ -85,6 +85,30 @@ def get_session_history(session_id: int):
     return {"session_id": session_id, "history": rows}
 
 
+@app.get("/sessions/{session_id}/instances")
+def get_session_instances(session_id: int):
+    conn = get_connection()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT id FROM sessions WHERE id = %s", (session_id,))
+        session = cur.fetchone()
+        if not session:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        cur.execute(
+            """
+            SELECT instance_name, coverage_pct, execs_per_sec, crashes_saved, recorded_at
+            FROM fuzzer_instances
+            WHERE session_id = %s
+            ORDER BY recorded_at ASC
+            """,
+            (session_id,),
+        )
+        rows = cur.fetchall()
+    conn.close()
+    return {"session_id": session_id, "instances": rows}
+
+
 @app.get("/crashes")
 def list_crashes(
     visibility: Optional[str] = None,
