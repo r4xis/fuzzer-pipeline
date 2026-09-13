@@ -22,17 +22,20 @@ class InstanceStats(TypedDict):
     crashes_saved: Optional[int]
 
 DB_CONFIG = {
-    "host": "127.0.0.1",
-    "port": 5432,
+    "host": os.environ.get("DB_HOST", "127.0.0.1"),
+    "port": int(os.environ.get("DB_PORT", 5432)),
     "dbname": "fuzzer_db",
     "user": "fuzzer",
     "password": os.environ.get("FUZZER_DB_PASSWORD", ""),
 }
 
+AFL_MASTER_CONTAINER = os.environ.get("AFL_MASTER_CONTAINER", "fuzzer-master")
+AFL_OUTPUT = os.environ.get("AFL_OUTPUT", "/data/afl-output")
+
 
 def get_whatsup_output() -> str:
     result = subprocess.run(
-        ["docker", "exec", "fuzzer-master", "afl-whatsup", "/data/afl-output"],
+        ["docker", "exec", AFL_MASTER_CONTAINER, "afl-whatsup", AFL_OUTPUT],
         capture_output=True, text=True, timeout=30,
     )
     return result.stdout

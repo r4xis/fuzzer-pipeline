@@ -240,6 +240,6 @@ def download_poc(crash_id: int):
 
     return FileResponse(
         file_path,
-        filename=f"crash_{crash_id}.nsf",
+        filename=f"crash_{crash_id}{os.path.splitext(file_path)[1]}",
         media_type="application/octet-stream",
     )

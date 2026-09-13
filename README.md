@@ -64,7 +64,7 @@ without changing the code.
 | `triage/` | Cron-driven collectors: coverage/instance statistics and CASR crash ingestion ([README](triage/README.md)) |
 | `db/` | Numbered SQL migrations and the migration runner ([README](db/README.md)) |
 | `frontend/` | React + Vite disclosure site ([README](frontend/README.md)) |
-| `docs/` | [Codebase guide](docs/codebase.md) and diagrams (database schema, frontend structure) |
+| `docs/` | [Codebase guide](docs/codebase.md), [switching the target](docs/switching-target.md), diagrams |
 | `.github/workflows/deploy.yml` | Push-to-deploy to the fuzzing host |
 
 ## Data model
@@ -98,8 +98,12 @@ psql ... -c "INSERT INTO programs (name, repo_url) VALUES ('<program>', '<url>')
 psql ... -c "INSERT INTO targets (program_id, focus, harness_version) VALUES (1, '<FORMAT>', '<harness tag>');"
 
 # 3. collect statistics and triage crashes every 15 minutes
-*/15 * * * * /data/run_triage.sh      # calls update_session_stats.py and triage.py, see triage/README.md
+echo "FUZZER_DB_PASSWORD=..." > /data/fuzzer-pipeline.env && chmod 600 /data/fuzzer-pipeline.env
+*/15 * * * * /path/to/fuzzer-pipeline/triage/run_triage.sh   # newest target row is the active one
 ```
+
+Switching to a new target or program is a data change plus a harness build;
+see [docs/switching-target.md](docs/switching-target.md).
 
 The frontend is a static build (`frontend/`, `npm run build`) that talks to
 the API over HTTP; see its README for local development.

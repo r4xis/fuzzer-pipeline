@@ -1,7 +1,7 @@
 # triage
 
-Two scripts that turn the AFL++ output directory into database rows. Both
-run on the fuzzing host from a cron job (every 15 minutes) and connect to
+The cron wrapper and two scripts that turn the AFL++ output directory into
+database rows. They run on the fuzzing host every 15 minutes and connect to
 Postgres on `127.0.0.1:5432` with `FUZZER_DB_PASSWORD` from the environment.
 
 ## update_session_stats.py `<target_id>`
@@ -27,17 +27,24 @@ Ingests CASR `.casrep` reports produced from AFL++ crashes:
 2. Inserts the finding (severity, stack trace, source context, sanitizer
    summary, PoC size and SHA-256) with `ON CONFLICT (input_hash) DO NOTHING`,
    which silently drops those repeats.
-3. Copies the crashing input to the PoC archive (`/data/poc_archive/<focus>/`)
-   and stores its path.
+3. Copies the crashing input to `<POC_ARCHIVE_ROOT>/<focus>/crash_NNNN.<focus>`
+   (the focus comes from the session's target) and stores its path.
 
 New findings start as `status = 'new'`, `visibility = 'private'`.
 
-## Cron wiring
+## run_triage.sh
 
-A host-side wrapper (`/data/run_triage.sh`, not part of the repository)
-exports the database password, runs `update_session_stats.py`, runs CASR over
-the AFL++ crash directory, then runs `triage.py` on the reports:
+The cron entry point. It picks the active target (newest `targets` row, or
+`TARGET_ID` from the env file), runs `update_session_stats.py`, runs CASR
+over the AFL++ crash directory in the fuzzer image, then runs `triage.py`
+on the reports. Configuration comes from `/data/fuzzer-pipeline.env`
+(`FUZZER_DB_PASSWORD` plus optional overrides listed at the top of the
+script):
 
 ```
-*/15 * * * * /data/run_triage.sh
+*/15 * * * * /home/opc/fuzzer-pipeline/triage/run_triage.sh
 ```
+
+Both Python scripts accept `DB_HOST` / `DB_PORT` overrides (default
+`127.0.0.1:5432`); `update_session_stats.py` also accepts
+`AFL_MASTER_CONTAINER` and `AFL_OUTPUT`.

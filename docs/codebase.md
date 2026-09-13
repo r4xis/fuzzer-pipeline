@@ -32,7 +32,7 @@ All fuzzers share the host's `/data` volume:
 | `/data/<seeds>/` | the seed corpus passed with `-i` |
 | `/data/poc_archive/<focus>/` | archived crashing inputs, one file per finding |
 | `/data/backups/` | database dumps and archive tarballs taken before maintenance |
-| `/data/run_triage.sh` | host-side cron wrapper (not in the repository) |
+| `/data/fuzzer-pipeline.env` | host-side secrets/overrides read by `triage/run_triage.sh` (not in the repository) |
 
 Everything that identifies the target — the harness, the seed directory, the
 archive sub-directory — lives in this layer. The rest of the system only
@@ -79,12 +79,16 @@ been run over the AFL++ crash directory.
   report, PoC size and SHA-256) with `ON CONFLICT (input_hash) DO NOTHING`,
   so repeats are dropped without an error. New rows start as
   `status = 'new'`, `visibility = 'private'`.
-- `archive_poc()` copies the input to `POC_ARCHIVE_DIR` as
-  `crash_<id>.<ext>` and the row's `poc_file_path` is updated to that
-  permanent location.
+- `session_focus()` looks up the session's target `focus`;
+  `archive_poc()` copies the input to
+  `<POC_ARCHIVE_ROOT>/<focus>/crash_<id>.<focus>` and the row's
+  `poc_file_path` is updated to that permanent location. Nothing in the
+  script names a specific target.
 
-`POC_ARCHIVE_DIR` is a constant at the top of the file and is target-specific
-(one sub-directory per fuzzed format); change it when the target changes.
+`triage/run_triage.sh` is the cron entry point that ties the two scripts
+together: it selects the active target (newest `targets` row unless
+`TARGET_ID` is set in `/data/fuzzer-pipeline.env`), runs the collector, runs
+CASR in the fuzzer image and then the ingestion.
 
 ## 4. Database — `db/`
 
@@ -201,12 +205,8 @@ checkout.
 
 ## 8. Adding a target or a program
 
-1. Build/adjust the harness and seed corpus, point `docker-compose.yml` at
-   the seeds and set `POC_ARCHIVE_DIR` in `triage/triage.py`.
-2. `INSERT INTO programs …` (once per library) and `INSERT INTO targets …`
-   (`program_id`, `focus`, `harness_version`).
-3. Make the cron wrapper call `update_session_stats.py` with the new
-   target id; the first run creates the session.
-4. Nothing changes in `api/` or `frontend/`: the new program/target appears
-   in the sidebar, index and footer, and its coverage, instances and findings
-   are served through the same endpoints.
+See [switching-target.md](switching-target.md) for the runbook. In short:
+build the harness and image, keep the old AFL++ output apart, insert the
+`programs` / `targets` rows, start the fuzzers. The newest target row is the
+active one for the cron job, the PoC archive follows its `focus`, and
+nothing changes in `api/` or `frontend/`.

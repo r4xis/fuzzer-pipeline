@@ -15,14 +15,16 @@ from pathlib import Path
 import psycopg2
 
 DB_CONFIG = {
-    "host": "127.0.0.1",
-    "port": 5432,
+    "host": os.environ.get("DB_HOST", "127.0.0.1"),
+    "port": int(os.environ.get("DB_PORT", 5432)),
     "dbname": "fuzzer_db",
     "user": "fuzzer",
     "password": os.environ.get("FUZZER_DB_PASSWORD", ""),
 }
 
-POC_ARCHIVE_DIR = Path("/data/poc_archive/vgm")
+# PoC inputs are archived under <root>/<focus>/, so the directory follows the
+# target instead of being edited on every switch.
+POC_ARCHIVE_ROOT = Path(os.environ.get("POC_ARCHIVE_ROOT", "/data/poc_archive"))
 
 HEX_ADDRESS_RE = re.compile(r"0x[0-9a-fA-F]+")
 
@@ -48,12 +50,31 @@ def compute_file_sha256(filepath: Path) -> str:
     return h.hexdigest()
 
 
-def archive_poc(original_crash_path: Path, crash_id: int) -> Path:
-    """Copy the crashing input to the permanent POC archive."""
-    POC_ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
-    dest = POC_ARCHIVE_DIR / f"crash_{crash_id:04d}.nsf"
+def archive_poc(original_crash_path: Path, crash_id: int, focus: str) -> Path:
+    """Copy the crashing input to the permanent POC archive for this target."""
+    ext = focus.lower()
+    archive_dir = POC_ARCHIVE_ROOT / ext
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    dest = archive_dir / f"crash_{crash_id:04d}.{ext}"
     shutil.copy(original_crash_path, dest)
     return dest
+
+
+def session_focus(conn, session_id: int) -> str:
+    """The target format (targets.focus) the session belongs to."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT t.focus FROM sessions s
+            JOIN targets t ON s.target_id = t.id
+            WHERE s.id = %s
+            """,
+            (session_id,),
+        )
+        row = cur.fetchone()
+    if not row or not row[0]:
+        raise SystemExit(f"session {session_id} is not linked to a target with a focus")
+    return row[0]
 
 
 def parse_casrep(casrep_path: Path) -> dict:
@@ -127,6 +148,7 @@ def main():
     print(f"Found {len(casrep_files)} CASR reports")
 
     conn = psycopg2.connect(**DB_CONFIG)
+    focus = session_focus(conn, session_id)
 
     inserted = 0
     skipped = 0
@@ -142,7 +164,7 @@ def main():
         crash_id = insert_crash(conn, session_id, report, original_crash)
 
         if crash_id:
-            final_path = archive_poc(original_crash, crash_id)
+            final_path = archive_poc(original_crash, crash_id, focus)
             with conn.cursor() as cur:
                 cur.execute(
                     "UPDATE crashes SET poc_file_path = %s WHERE id = %s",
