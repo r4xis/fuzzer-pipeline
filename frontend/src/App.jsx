@@ -105,7 +105,7 @@ export default function App() {
         latestAt={session.latestAt}
         hasTarget={Boolean(target)}
         hasSession={session.enabled}
-        programName={program ? program.name : null}
+        onHome={clearAll}
         onToggleMenu={() => setNavOpen((o) => !o)}
       />
       <Sidebar

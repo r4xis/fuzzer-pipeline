@@ -24,3 +24,6 @@ jobs:
             fi
             cd ~/fuzzer-pipeline
             docker compose build
+            # Only the API is recreated: restarting the fuzzer services would
+            # kill the running AFL++ campaign.
+            docker compose up -d api

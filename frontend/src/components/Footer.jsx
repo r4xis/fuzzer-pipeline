@@ -1,4 +1,4 @@
-const PIPELINE_REPO_URL = "https://github.com/placeholder/fuzzer-pipeline";
+const PIPELINE_REPO_URL = "https://github.com/r4xis/fuzzer-pipeline";
 
 export default function Footer({ programs }) {
   return (

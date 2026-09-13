@@ -1,7 +1,7 @@
 import { fmtRelative } from "../format";
 
-const GITHUB_URL = "https://github.com/placeholder";
-const LINKEDIN_URL = "https://www.linkedin.com/in/placeholder";
+const GITHUB_URL = "https://github.com/r4xis";
+const LINKEDIN_URL = "https://www.linkedin.com/in/efecan-cetinkaya/";
 
 function GitHubIcon() {
   return (
@@ -26,16 +26,22 @@ function liveLabel(liveState, hasTarget, hasSession) {
   return hasSession ? "No readings" : "No session";
 }
 
-export default function Header({ liveState, latestAt, hasTarget, hasSession, programName, onToggleMenu }) {
+export default function Header({ liveState, latestAt, hasTarget, hasSession, onHome, onToggleMenu }) {
   const cls = `live-indicator is-${hasTarget ? liveState : "none"}`;
+  const goHome = (e) => {
+    e.preventDefault();
+    onHome();
+  };
   return (
     <header className="site-header">
       <div className="brand">
         <button className="menu-btn" onClick={onToggleMenu} aria-label="Toggle navigation">
           Nav
         </button>
-        <h1 className="brand-title">Crash Disclosure</h1>
-        <span className="brand-sub">{programName ? `${programName} · disclosure bulletin` : "Fuzzing disclosure bulletin"}</span>
+        <h1 className="brand-title">
+          <a href="/" onClick={goHome}>Crash Disclosure</a>
+        </h1>
+        <span className="brand-sub">Fuzzing disclosure bulletin</span>
       </div>
       <div className="header-right">
         <div className={cls} title="Fuzzer activity for the selected target, inferred from the last recorded reading">
