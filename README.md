@@ -64,7 +64,7 @@ without changing the code.
 | `triage/` | Cron-driven collectors: coverage/instance statistics and CASR crash ingestion ([README](triage/README.md)) |
 | `db/` | Numbered SQL migrations and the migration runner ([README](db/README.md)) |
 | `frontend/` | React + Vite disclosure site ([README](frontend/README.md)) |
-| `docs/` | Design notes |
+| `docs/` | [Codebase guide](docs/codebase.md) and diagrams (database schema, frontend structure) |
 | `.github/workflows/deploy.yml` | Push-to-deploy to the fuzzing host |
 
 ## Data model
