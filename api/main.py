@@ -4,13 +4,21 @@ from typing import Optional
 import psycopg2
 import psycopg2.extras
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 app = FastAPI(title="Fuzzer Crash Triage API")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
+
 DB_CONFIG = {
     "host": os.environ.get("DB_HOST", "postgres"),
-    "port": 5432,
+    "port": int(os.environ.get("DB_PORT", 5432)),
     "dbname": "fuzzer_db",
     "user": "fuzzer",
     "password": os.environ.get("FUZZER_DB_PASSWORD", ""),
@@ -26,31 +34,66 @@ def root():
     return {"status": "ok", "service": "fuzzer-crash-triage-api"}
 
 
+@app.get("/programs")
+def list_programs():
+    conn = get_connection()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT id, name, repo_url FROM programs ORDER BY name")
+        rows = cur.fetchall()
+    conn.close()
+    return {"programs": rows}
+
+
+@app.get("/targets")
+def list_targets(program_id: Optional[int] = None):
+    query = "SELECT id, program_id, focus, harness_version FROM targets WHERE 1=1"
+    params = []
+    if program_id:
+        query += " AND program_id = %s"
+        params.append(program_id)
+    query += " ORDER BY focus"
+
+    conn = get_connection()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute(query, params)
+        rows = cur.fetchall()
+    conn.close()
+    return {"targets": rows}
+
+
 @app.get("/crashes")
-def list_crashes(visibility: Optional[str] = None, status: Optional[str] = None):
-    """
-    List crashes. Defaults to only public crashes for safety.
-    Pass visibility=private explicitly (admin use) to see everything.
-    """
+def list_crashes(
+    visibility: Optional[str] = None,
+    status: Optional[str] = None,
+    target_id: Optional[int] = None,
+):
     query = """
-        SELECT id, crash_line, severity_type, severity_desc,
-               visibility, status, discovered_at
-        FROM crashes
+        SELECT c.id, c.crash_line, c.severity_type, c.severity_desc,
+               c.visibility, c.status, c.discovered_at,
+               t.focus AS target_focus, p.name AS program_name
+        FROM crashes c
+        LEFT JOIN sessions s ON c.session_id = s.id
+        LEFT JOIN targets t ON s.target_id = t.id
+        LEFT JOIN programs p ON t.program_id = p.id
         WHERE 1=1
     """
     params = []
 
     if visibility:
-        query += " AND visibility = %s"
+        query += " AND c.visibility = %s"
         params.append(visibility)
     else:
-        query += " AND visibility = 'public'"
+        query += " AND c.visibility = 'public'"
 
     if status:
-        query += " AND status = %s"
+        query += " AND c.status = %s"
         params.append(status)
 
-    query += " ORDER BY discovered_at DESC"
+    if target_id:
+        query += " AND t.id = %s"
+        params.append(target_id)
+
+    query += " ORDER BY c.discovered_at DESC"
 
     conn = get_connection()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
@@ -62,16 +105,20 @@ def list_crashes(visibility: Optional[str] = None, status: Optional[str] = None)
 
 
 @app.get("/crashes/{crash_id}")
-def get_crash(crash_id: int):
+def get_crash(crash_id: int, visibility: Optional[str] = None):
     conn = get_connection()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute(
             """
-            SELECT id, crash_line, severity_type, severity_desc, severity_explain,
-                   stacktrace, asan_summary, source_context, poc_file_size,
-                   poc_file_sha256, visibility, status, discovered_at
-            FROM crashes
-            WHERE id = %s
+            SELECT c.id, c.crash_line, c.severity_type, c.severity_desc, c.severity_explain,
+                   c.stacktrace, c.asan_summary, c.source_context, c.poc_file_size,
+                   c.poc_file_sha256, c.visibility, c.status, c.discovered_at,
+                   t.focus AS target_focus, p.name AS program_name
+            FROM crashes c
+            LEFT JOIN sessions s ON c.session_id = s.id
+            LEFT JOIN targets t ON s.target_id = t.id
+            LEFT JOIN programs p ON t.program_id = p.id
+            WHERE c.id = %s
             """,
             (crash_id,),
         )
@@ -81,8 +128,7 @@ def get_crash(crash_id: int):
     if not row:
         raise HTTPException(status_code=404, detail="Crash not found")
 
-    # Never leak the private disk path to API consumers
-    if row["visibility"] != "public":
+    if visibility != "private" and row["visibility"] != "public":
         raise HTTPException(status_code=403, detail="This crash has not been disclosed yet")
 
     return row
