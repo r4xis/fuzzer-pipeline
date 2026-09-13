@@ -29,3 +29,8 @@ edit an applied migration.
 One-off maintenance scripts that were run once against production and are
 kept for the record (dated in the file name). They are not meant to be run
 again.
+
+- `2026-09-13_retro_dedupe_fix.py` — moved stale PoC paths and collapsed
+  duplicates created before load addresses were stripped from the hash.
+- `2026-09-13_rehash_by_crash_site.py` — re-keyed the earliest finding per
+  crash site when dedup switched to the crash location.

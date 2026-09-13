@@ -128,8 +128,12 @@ def list_crashes(
     status: Optional[str] = None,
     target_id: Optional[int] = None,
 ):
+    # One row per crash site: the earliest finding at each crash_line. Older
+    # rows that repeat a site (ingested before dedup keyed on the site) stay
+    # in the table but are never listed.
     query = """
-        SELECT c.id, c.crash_line, c.severity_type, c.severity_desc,
+        SELECT DISTINCT ON (c.crash_line)
+               c.id, c.crash_line, c.severity_type, c.severity_desc,
                c.visibility, c.status, c.discovered_at, c.report_url,
                t.focus AS target_focus, p.name AS program_name
         FROM crashes c
@@ -153,7 +157,8 @@ def list_crashes(
         query += " AND t.id = %s"
         params.append(target_id)
 
-    query += " ORDER BY c.discovered_at DESC"
+    query += " ORDER BY c.crash_line, c.discovered_at ASC"
+    query = f"SELECT * FROM ({query}) AS unique_sites ORDER BY discovered_at DESC"
 
     conn = get_connection()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:

@@ -46,10 +46,9 @@ without changing the code.
    instance (master and secondaries separately). Nothing is overwritten, so
    coverage can be plotted over time.
 3. **Triage** — the same cron job runs CASR over new AFL++ crashes and feeds
-   the reports to `triage/triage.py`, which classifies each crash, hashes the
-   top of the stack trace (with load addresses stripped, so ASLR does not
-   split one bug into many), skips duplicates, archives the crashing input and
-   inserts the finding.
+   the reports to `triage/triage.py`, which classifies each crash, keys it on
+   its crash site (file, line and column) so repeats of a known location are
+   skipped, archives the crashing input and inserts the finding.
 4. **Disclosure** — the API serves the data and the frontend renders it. A
    finding is created as `new` and `private`. Once it has been reported
    upstream it is switched to `reported` (with the report URL) and `public`;

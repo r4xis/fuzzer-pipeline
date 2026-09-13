@@ -11,7 +11,7 @@ frontend (CORS allows `GET` only) and exists for operator tooling.
 | GET | `/` | health |
 | GET | `/programs` | `{programs: [{id, name, repo_url}]}` |
 | GET | `/targets?program_id=` | adds `created_at` and `latest_session_id` (most recent session of the target) |
-| GET | `/crashes?visibility=&status=&target_id=` | default: public rows only; `visibility=private` is the admin view and returns every row |
+| GET | `/crashes?visibility=&status=&target_id=` | one row per crash site (the earliest finding at each `crash_line`); default: public rows only; `visibility=private` is the admin view and returns every site |
 | GET | `/crashes/{id}?visibility=` | full detail; unreported/private rows need `visibility=private` |
 | GET | `/crashes/{id}/download` | PoC input, `public` rows only (403 otherwise, 410 if the file is missing) |
 | GET | `/sessions/{id}/history` | session coverage / exec readings, oldest first |

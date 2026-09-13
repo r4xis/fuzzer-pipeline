@@ -27,12 +27,18 @@ POC_ARCHIVE_DIR = Path("/data/poc_archive/vgm")
 HEX_ADDRESS_RE = re.compile(r"0x[0-9a-fA-F]+")
 
 
-def compute_input_hash(stacktrace: list) -> str:
-    """Hash the top 4 stack frames to dedup crashes with the same root cause."""
-    top_frames = stacktrace[:4]
-    joined = "|".join(top_frames)
-    joined = HEX_ADDRESS_RE.sub("", joined)
-    return hashlib.sha256(joined.encode()).hexdigest()
+def crash_site(crash_line: str, stacktrace: list) -> str:
+    """The crash location (file:line:col), falling back to the top frame."""
+    if crash_line:
+        return crash_line.strip()
+    top = stacktrace[0] if stacktrace else ""
+    return HEX_ADDRESS_RE.sub("", top).strip()
+
+
+def compute_input_hash(crash_line: str, stacktrace: list) -> str:
+    """Dedup key: one finding per crash site, so repeats of a known crash
+    location are dropped at insert time instead of accumulating."""
+    return hashlib.sha256(crash_site(crash_line, stacktrace).encode()).hexdigest()
 
 
 def compute_file_sha256(filepath: Path) -> str:
@@ -66,7 +72,7 @@ def find_original_crash_file(casrep_path: Path) -> Path:
 
 def insert_crash(conn, session_id: int, report: dict, poc_path: Path) -> int:
     stacktrace = report.get("Stacktrace", [])
-    input_hash = compute_input_hash(stacktrace)
+    input_hash = compute_input_hash(report.get("CrashLine", ""), stacktrace)
 
     severity = report.get("CrashSeverity", {})
     asan_report = report.get("AsanReport", [])

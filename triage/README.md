@@ -21,11 +21,12 @@ If no session exists for the target one is created.
 
 Ingests CASR `.casrep` reports produced from AFL++ crashes:
 
-1. Hashes the top four stack frames with hexadecimal addresses stripped, so
-   the same root cause hashes identically across runs regardless of ASLR.
+1. Keys the finding on its crash site (`CrashLine`, i.e. `file:line:col`;
+   falls back to the address-stripped top stack frame), so every later crash
+   at an already-recorded location is treated as a repeat.
 2. Inserts the finding (severity, stack trace, source context, sanitizer
    summary, PoC size and SHA-256) with `ON CONFLICT (input_hash) DO NOTHING`,
-   which silently drops duplicates.
+   which silently drops those repeats.
 3. Copies the crashing input to the PoC archive (`/data/poc_archive/<focus>/`)
    and stores its path.
 
