@@ -1,20 +1,25 @@
 import os
-from typing import Optional
+from typing import Literal, Optional
 
 import psycopg2
 import psycopg2.extras
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
 app = FastAPI(title="Fuzzer Crash Triage API")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-    allow_methods=["GET"],
+    allow_methods=["GET", "PATCH"],
     allow_headers=["*"],
 )
+
+
+class CrashStatusUpdate(BaseModel):
+    status: Literal["new", "triaged", "reported", "duplicate"]
 
 DB_CONFIG = {
     "host": os.environ.get("DB_HOST", "postgres"),
@@ -178,6 +183,24 @@ def get_crash(crash_id: int, visibility: Optional[str] = None):
 
     if visibility != "private" and row["visibility"] != "public":
         raise HTTPException(status_code=403, detail="This crash has not been disclosed yet")
+
+    return row
+
+
+@app.patch("/crashes/{crash_id}/status")
+def update_crash_status(crash_id: int, body: CrashStatusUpdate):
+    conn = get_connection()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute(
+            "UPDATE crashes SET status = %s WHERE id = %s RETURNING id, status",
+            (body.status, crash_id),
+        )
+        row = cur.fetchone()
+    conn.commit()
+    conn.close()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Crash not found")
 
     return row
 
