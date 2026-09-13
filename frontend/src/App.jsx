@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
-import { fetchProgramTree } from "./api/client";
+import { fetchCrashes, fetchProgramTree } from "./api/client";
 import { useCrashWatch, useSessionData } from "./hooks";
 import Header from "./components/Header";
 import Sidebar from "./components/Sidebar";
 import Footer from "./components/Footer";
-import SignalTrace from "./components/SignalTrace";
 import IndexView from "./components/IndexView";
 import TargetList from "./components/TargetList";
 import TargetOverview from "./components/TargetOverview";
@@ -13,10 +12,22 @@ import "./index.css";
 
 const TREE_RETRY_MS = 8000;
 
+async function fetchTargetCounts(targets) {
+  const entries = await Promise.all(
+    targets.map((t) =>
+      fetchCrashes(t.id)
+        .then((list) => [t.id, { total: list.length, reported: list.filter((c) => c.status === "reported").length }])
+        .catch(() => [t.id, null]),
+    ),
+  );
+  return Object.fromEntries(entries);
+}
+
 export default function App() {
   const [tree, setTree] = useState(null);
   const [treeError, setTreeError] = useState(null);
   const [treeAttempt, setTreeAttempt] = useState(0);
+  const [counts, setCounts] = useState({});
   const [selection, setSelection] = useState({ programId: null, targetId: null, crashId: null });
   const [navOpen, setNavOpen] = useState(false);
 
@@ -51,6 +62,17 @@ export default function App() {
 
   const session = useSessionData(sessionId);
   const crashWatch = useCrashWatch(target ? target.id : null);
+
+  // Finding counts for every target, shown in the index and the sidebar;
+  // refreshed whenever the watcher notices a new crash on the open target.
+  useEffect(() => {
+    if (!tree) return undefined;
+    let alive = true;
+    fetchTargetCounts(tree.flatMap((e) => e.targets)).then((c) => alive && setCounts(c));
+    return () => {
+      alive = false;
+    };
+  }, [tree, crashWatch.spikeKey]);
 
   const selectProgram = (programId) => {
     setSelection({ programId, targetId: null, crashId: null });
@@ -90,12 +112,13 @@ export default function App() {
       <TargetList
         program={program}
         targets={programEntry.targets}
+        counts={counts}
         onSelect={(targetId) => selectTarget(program.id, targetId)}
         onBack={clearAll}
       />
     );
   } else {
-    view = <IndexView tree={tree} treeError={treeError} onRetry={retryTree} onSelectTarget={selectTarget} />;
+    view = <IndexView tree={tree} treeError={treeError} counts={counts} onRetry={retryTree} onSelectTarget={selectTarget} />;
   }
 
   return (
@@ -111,6 +134,7 @@ export default function App() {
       <Sidebar
         tree={tree}
         treeError={treeError}
+        counts={counts}
         onRetry={retryTree}
         selection={selection}
         onSelectProgram={selectProgram}
@@ -119,14 +143,7 @@ export default function App() {
         onClose={() => setNavOpen(false)}
       />
       <main className="main">
-        <div className="main-inner">
-          <SignalTrace
-            instances={target ? session.instances : null}
-            spikeKey={crashWatch.spikeKey}
-            live={Boolean(target) && session.liveState === "live"}
-          />
-          {view}
-        </div>
+        <div className="main-inner">{view}</div>
       </main>
       <Footer programs={tree ? tree.map((e) => e.program) : []} />
     </div>

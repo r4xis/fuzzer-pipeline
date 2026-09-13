@@ -51,12 +51,14 @@ src/
     Header.jsx            title, LIVE/CLOSED indicator, social links, mobile nav toggle
     Sidebar.jsx           persistent program → target tree
     Footer.jsx            project description and links
-    SignalTrace.jsx       oscilloscope line showing the selected instance's crashes-saved
-                          history (master by default); spikes when a new finding appears
+    SignalTrace.jsx       compact oscilloscope strip on the target page showing the selected
+                          instance's crashes-saved history (master by default); spikes when
+                          a new finding appears
     IndexView.jsx         landing view listing programs and targets
     TargetList.jsx        targets of one program
     TargetOverview.jsx    coverage chart, fuzzer instances, findings for a target
-    CoverageChart.jsx     coverage over time, y-axis scaled to the session's own range
+    CoverageChart.jsx     static coverage-over-time chart, one line per fuzzer instance
+                          (master + secondaries), y-axis scaled to the session's own range
     InstanceTable.jsx     fuzzer0 (master) / fuzzerN (slave) readings
     CrashList.jsx         findings with All / Reported tabs
     CrashDetail.jsx       finding detail, gated on status === "reported"
@@ -68,8 +70,10 @@ src/
 - **LIVE / CLOSED** is inferred: if the newest `recorded_at` for the selected
   target's session (from `/sessions/{id}/history` or `/instances`) is less
   than 20 minutes old at the time of the last poll, the target is LIVE.
-  Session data is polled every 5 minutes; readings themselves are produced
-  every 15 minutes by the pipeline's cron job.
+  Session data is polled every 5 minutes.
+- **Coverage chart** plots `/sessions/{id}/instances` as one line per
+  instance; the legend toggles instances. It falls back to the session-level
+  history when no per-instance readings exist.
 - **Signal trace spike**: the crash count for the selected target is polled
   every 45 seconds; if it increased since the previous poll, the trace flashes
   a transient and the findings list refreshes.

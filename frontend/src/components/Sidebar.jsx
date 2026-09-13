@@ -1,6 +1,11 @@
 import ApiUnreachable from "./ApiUnreachable";
 
-export default function Sidebar({ tree, treeError, onRetry, selection, onSelectProgram, onSelectTarget, open, onClose }) {
+function countLabel(c) {
+  if (!c) return "";
+  return c.total === 0 ? "none" : `${c.total}${c.reported ? ` · ${c.reported} rep.` : ""}`;
+}
+
+export default function Sidebar({ tree, treeError, counts, onRetry, selection, onSelectProgram, onSelectTarget, open, onClose }) {
   return (
     <>
       <div className={`sidebar-backdrop ${open ? "open" : ""}`} onClick={onClose} />
@@ -27,9 +32,10 @@ export default function Sidebar({ tree, treeError, onRetry, selection, onSelectP
                   key={t.id}
                   className={`nav-target ${selection.targetId === t.id ? "active" : ""}`}
                   onClick={() => onSelectTarget(program.id, t.id)}
+                  title={counts[t.id] ? `${counts[t.id].total} findings, ${counts[t.id].reported} reported` : undefined}
                 >
                   <span className="nav-target-focus">{t.focus}</span>
-                  <span className="nav-target-meta">{t.harness_version || ""}</span>
+                  <span className="nav-target-meta">{countLabel(counts[t.id])}</span>
                 </button>
               ))}
             </div>

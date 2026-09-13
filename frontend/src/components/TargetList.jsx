@@ -1,4 +1,12 @@
-export default function TargetList({ program, targets, onSelect, onBack }) {
+import { fmtDate } from "../format";
+
+function countsLabel(c) {
+  if (c === undefined) return "…";
+  if (c === null) return "—";
+  return `${c.total} finding${c.total === 1 ? "" : "s"} · ${c.reported} reported`;
+}
+
+export default function TargetList({ program, targets, counts, onSelect, onBack }) {
   return (
     <div>
       <button className="btn-link" onClick={onBack}>← all programs</button>
@@ -17,8 +25,8 @@ export default function TargetList({ program, targets, onSelect, onBack }) {
         {targets.map((t) => (
           <button key={t.id} className="row-btn target-row" onClick={() => onSelect(t.id)}>
             <span className="focus">{t.focus}</span>
-            <span className="harness">{t.harness_version || "—"}</span>
-            <span className="count">{t.latest_session_id ? `session #${t.latest_session_id}` : "no session"}</span>
+            <span className="since">{t.created_at ? `since ${fmtDate(t.created_at)}` : ""}</span>
+            <span className="count">{countsLabel(counts[t.id])}</span>
             <span className="arrow">→</span>
           </button>
         ))}

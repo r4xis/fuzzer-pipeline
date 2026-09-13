@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { fetchCrashes, fetchSessionHistory, fetchSessionInstances } from "./api/client";
 
 const LIVE_WINDOW_MS = 20 * 60 * 1000;
@@ -112,19 +112,24 @@ export function useCrashWatch(targetId) {
   return { crashes: data, count: data ? data.length : null, error, spikeKey };
 }
 
+// Callback ref rather than a layout effect: the measured element is often
+// mounted only after data arrives, and a callback ref attaches the observer
+// whenever the element actually appears. ResizeObserver delivers an initial
+// notification on observe(), so no synchronous measurement is needed.
 export function useElementWidth() {
-  const ref = useRef(null);
   const [width, setWidth] = useState(0);
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return undefined;
-    // ResizeObserver delivers an initial notification on observe(), so no
-    // synchronous measurement is needed here.
+  const observer = useRef(null);
+  const ref = useCallback((el) => {
+    if (observer.current) {
+      observer.current.disconnect();
+      observer.current = null;
+    }
+    if (!el) return;
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) setWidth(entry.contentRect.width);
     });
     ro.observe(el);
-    return () => ro.disconnect();
+    observer.current = ro;
   }, []);
   return [ref, width];
 }

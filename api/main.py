@@ -52,7 +52,7 @@ def list_programs():
 @app.get("/targets")
 def list_targets(program_id: Optional[int] = None):
     query = """
-        SELECT t.id, t.program_id, t.focus, t.harness_version,
+        SELECT t.id, t.program_id, t.focus, t.harness_version, t.created_at,
                (SELECT s.id FROM sessions s
                 WHERE s.target_id = t.id
                 ORDER BY s.started_at DESC NULLS LAST

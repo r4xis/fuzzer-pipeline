@@ -1,7 +1,8 @@
 import CoverageChart from "./CoverageChart";
 import InstanceTable from "./InstanceTable";
 import CrashList from "./CrashList";
-import { fmtCompact, fmtPct } from "../format";
+import SignalTrace from "./SignalTrace";
+import { fmtCompact, fmtDate, fmtPct } from "../format";
 
 export default function TargetOverview({ program, target, session, crashWatch, onSelectCrash, onBack }) {
   const latestHistory = session.history && session.history.length ? session.history[session.history.length - 1] : null;
@@ -11,19 +12,29 @@ export default function TargetOverview({ program, target, session, crashWatch, o
   return (
     <div>
       <button className="btn-link" onClick={onBack}>← {program.name}</button>
-      <div className="view-header">
-        <p className="eyebrow">
-          {program.name}
-          <span className="sep">/</span>
-          target
-          {target.harness_version && (
-            <>
-              <span className="sep">·</span>
-              {target.harness_version}
-            </>
-          )}
-        </p>
-        <h1 className="view-title mono">{target.focus}</h1>
+
+      <div className="target-head">
+        <div className="view-header">
+          <p className="eyebrow">
+            {program.name}
+            <span className="sep">/</span>
+            target
+            {target.created_at && (
+              <>
+                <span className="sep">·</span>
+                fuzzing since {fmtDate(target.created_at)}
+              </>
+            )}
+          </p>
+          <h1 className="view-title mono">{target.focus}</h1>
+        </div>
+        {session.enabled && (
+          <SignalTrace
+            instances={session.instances}
+            spikeKey={crashWatch.spikeKey}
+            live={session.liveState === "live"}
+          />
+        )}
       </div>
 
       <div className="stat-strip">
@@ -58,12 +69,12 @@ export default function TargetOverview({ program, target, session, crashWatch, o
           <div className="section">
             <div className="section-label">
               Coverage over time
-              <span className="label-note">session #{target.latest_session_id} · sampled every 15 min</span>
+              <span className="label-note">per fuzzer instance</span>
             </div>
             {session.error ? (
               <div className="error">failed to load session data: {String(session.error.message || session.error)}</div>
             ) : (
-              <CoverageChart history={session.history} />
+              <CoverageChart instances={session.instances} history={session.history} />
             )}
           </div>
 
@@ -78,10 +89,7 @@ export default function TargetOverview({ program, target, session, crashWatch, o
       )}
 
       <div className="section">
-        <div className="section-label">
-          Findings
-          <span className="label-note">polled every 45 s</span>
-        </div>
+        <div className="section-label">Findings</div>
         <CrashList key={target.id} targetId={target.id} refreshKey={crashWatch.spikeKey} onSelect={onSelectCrash} />
       </div>
     </div>
