@@ -34,3 +34,5 @@ again.
   duplicates created before load addresses were stripped from the hash.
 - `2026-09-13_rehash_by_crash_site.py` — re-keyed the earliest finding per
   crash site when dedup switched to the crash location.
+- `2026-09-13_delete_hidden_duplicates.py` — deleted the findings that
+  repeated an earlier crash site, and their orphaned PoC files.

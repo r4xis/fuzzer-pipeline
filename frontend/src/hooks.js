@@ -87,6 +87,28 @@ export function useSessionData(sessionId) {
   };
 }
 
+// Live/closed state across every target, for the header when nothing is
+// selected: the newest reading from any target's latest session.
+export function useFleetLive(tree) {
+  const sessionIds = tree
+    ? tree.flatMap((e) => e.targets.map((t) => t.latest_session_id).filter((id) => id !== null && id !== undefined))
+    : [];
+  const enabled = sessionIds.length > 0;
+  const { data, fetchedAt } = usePolled(
+    () => Promise.all(sessionIds.map((id) => fetchSessionHistory(id).catch(() => []))),
+    ["fleet", sessionIds.join(",")],
+    SESSION_POLL_MS,
+    { enabled },
+  );
+
+  const latestAt = data ? latestTimestamp(data.flat(), null) : null;
+  let liveState = "unknown";
+  if (enabled && latestAt && fetchedAt) {
+    liveState = fetchedAt - latestAt < LIVE_WINDOW_MS ? "live" : "closed";
+  }
+  return { enabled, latestAt, liveState };
+}
+
 // Watches a target's crash count; bumps spikeKey when it grows between polls.
 export function useCrashWatch(targetId) {
   const enabled = targetId !== null && targetId !== undefined;

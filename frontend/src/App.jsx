@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchCrashes, fetchProgramTree } from "./api/client";
-import { useCrashWatch, useSessionData } from "./hooks";
+import { useCrashWatch, useFleetLive, useSessionData } from "./hooks";
 import Header from "./components/Header";
 import Sidebar from "./components/Sidebar";
 import Footer from "./components/Footer";
@@ -62,6 +62,10 @@ export default function App() {
 
   const session = useSessionData(sessionId);
   const crashWatch = useCrashWatch(target ? target.id : null);
+  const fleet = useFleetLive(tree);
+  const live = target
+    ? { liveState: session.liveState, latestAt: session.latestAt, hasSession: session.enabled, scope: target.focus }
+    : { liveState: fleet.liveState, latestAt: fleet.latestAt, hasSession: fleet.enabled, scope: "all targets" };
 
   // Finding counts for every target, shown in the index and the sidebar;
   // refreshed whenever the watcher notices a new crash on the open target.
@@ -124,10 +128,10 @@ export default function App() {
   return (
     <div className="shell">
       <Header
-        liveState={session.liveState}
-        latestAt={session.latestAt}
-        hasTarget={Boolean(target)}
-        hasSession={session.enabled}
+        liveState={live.liveState}
+        latestAt={live.latestAt}
+        hasSession={live.hasSession}
+        scope={live.scope}
         onHome={clearAll}
         onToggleMenu={() => setNavOpen((o) => !o)}
       />

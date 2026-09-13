@@ -19,15 +19,14 @@ function LinkedInIcon() {
   );
 }
 
-function liveLabel(liveState, hasTarget, hasSession) {
-  if (!hasTarget) return "No target";
+function liveLabel(liveState, hasSession) {
   if (liveState === "live") return "Live";
   if (liveState === "closed") return "Closed";
   return hasSession ? "No readings" : "No session";
 }
 
-export default function Header({ liveState, latestAt, hasTarget, hasSession, onHome, onToggleMenu }) {
-  const cls = `live-indicator is-${hasTarget ? liveState : "none"}`;
+export default function Header({ liveState, latestAt, hasSession, scope, onHome, onToggleMenu }) {
+  const cls = `live-indicator is-${liveState}`;
   const goHome = (e) => {
     e.preventDefault();
     onHome();
@@ -44,10 +43,10 @@ export default function Header({ liveState, latestAt, hasTarget, hasSession, onH
         <span className="brand-sub">Fuzzing disclosure bulletin</span>
       </div>
       <div className="header-right">
-        <div className={cls} title="Fuzzer activity for the selected target, inferred from the last recorded reading">
+        <div className={cls} title={`Fuzzer activity for ${scope}, inferred from the last recorded reading`}>
           <span className="live-dot" />
-          <span>{liveLabel(liveState, hasTarget, hasSession)}</span>
-          {hasTarget && latestAt && <span className="live-since">· {fmtRelative(latestAt)}</span>}
+          <span>{liveLabel(liveState, hasSession)}</span>
+          {latestAt && <span className="live-since">· {fmtRelative(latestAt)}</span>}
         </div>
         <div className="icon-links">
           <a className="icon-link" href={GITHUB_URL} target="_blank" rel="noreferrer" aria-label="GitHub">

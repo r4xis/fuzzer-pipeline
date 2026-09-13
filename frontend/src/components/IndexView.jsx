@@ -13,10 +13,6 @@ export default function IndexView({ tree, treeError, counts, onRetry, onSelectTa
       <div className="view-header">
         <p className="eyebrow">Index</p>
         <h1 className="view-title">Fuzzing targets</h1>
-        <p className="view-lead">
-          Each target is one input format of the program under test, fuzzed with its own harness.
-          Open a target for its coverage history, fuzzer instances and findings.
-        </p>
       </div>
 
       {treeError && !tree && <ApiUnreachable error={treeError} onRetry={onRetry} />}
