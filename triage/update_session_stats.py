@@ -88,7 +88,7 @@ def get_or_create_session(conn, target_id: int) -> int:
         return cur.fetchone()[0]
 
 
-def update_session(conn, session_id: int, coverage_pct: float, total_execs: int):
+def record_session_stats(conn, session_id: int, coverage_pct: float, total_execs: int):
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -98,6 +98,13 @@ def update_session(conn, session_id: int, coverage_pct: float, total_execs: int)
             WHERE id = %s
             """,
             (coverage_pct, total_execs, session_id),
+        )
+        cur.execute(
+            """
+            INSERT INTO coverage_history (session_id, recorded_at, coverage_pct, total_execs)
+            VALUES (%s, now(), %s, %s)
+            """,
+            (session_id, coverage_pct, total_execs),
         )
         conn.commit()
 
@@ -120,7 +127,7 @@ def main():
 
     conn = psycopg2.connect(**DB_CONFIG)
     session_id = get_or_create_session(conn, target_id)
-    update_session(conn, session_id, coverage_pct, total_execs)
+    record_session_stats(conn, session_id, coverage_pct, total_execs)
     conn.close()
 
     print(f"Updated session {session_id}: coverage={coverage_pct}%, execs={total_execs}")
