@@ -5,6 +5,7 @@ Usage: triage.py <casr_output_dir> <session_id>
 """
 
 import json
+import re
 import sys
 import os
 import hashlib
@@ -23,11 +24,14 @@ DB_CONFIG = {
 
 POC_ARCHIVE_DIR = Path("/data/poc_archive/vgm")
 
+HEX_ADDRESS_RE = re.compile(r"0x[0-9a-fA-F]+")
+
 
 def compute_input_hash(stacktrace: list) -> str:
     """Hash the top 4 stack frames to dedup crashes with the same root cause."""
     top_frames = stacktrace[:4]
     joined = "|".join(top_frames)
+    joined = HEX_ADDRESS_RE.sub("", joined)
     return hashlib.sha256(joined.encode()).hexdigest()
 
 
