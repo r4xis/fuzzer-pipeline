@@ -20,6 +20,7 @@ DB_HOST=... DB_PORT=... FUZZER_DB_PASSWORD=... python3 db/run_migrations.py
 | 002 | `coverage_history` — session coverage/exec readings over time |
 | 003 | `fuzzer_instances` — per-instance readings over time |
 | 004 | `crashes.report_url` — link to the upstream report |
+| 005 | `sessions.fuzzer_started_at` — AFL++ master start time, for restart detection |
 
 To add a migration, create the next numbered file and run the runner; never
 edit an applied migration.

@@ -1,4 +1,4 @@
-import { fmtRelative } from "../format";
+import { fmtDateTime, fmtRelative } from "../format";
 
 const GITHUB_URL = "https://github.com/r4xis";
 const LINKEDIN_URL = "https://www.linkedin.com/in/efecan-cetinkaya/";
@@ -22,10 +22,44 @@ function LinkedInIcon() {
 function liveLabel(liveState, hasSession) {
   if (liveState === "live") return "Live";
   if (liveState === "closed") return "Closed";
+  if (liveState === "idle") return "Not running";
   return hasSession ? "No readings" : "No session";
 }
 
-export default function Header({ liveState, latestAt, hasSession, scope, onHome, onToggleMenu }) {
+function runSummary(t) {
+  if (t.running) return `running · reading ${fmtRelative(t.latestAt)}`;
+  if (t.endedAt) return `stopped ${fmtRelative(t.endedAt)}`;
+  if (t.latestAt) return `stopped · last reading ${fmtRelative(t.latestAt)}`;
+  return "no readings";
+}
+
+// Hover/focus list behind the indicator: every target with a session, the
+// running ones first, so the visitor can see what is being fuzzed right now.
+function LivePopover({ targets, currentTargetId }) {
+  const running = targets.filter((t) => t.running);
+  return (
+    <div className="live-popover" role="tooltip">
+      <div className="live-popover-title">
+        {running.length === 0 ? "Nothing is being fuzzed right now" : `Fuzzing now: ${running.map((t) => t.focus).join(", ")}`}
+      </div>
+      {targets.length === 0 && <div className="live-popover-empty">no fuzzing session registered yet</div>}
+      {targets.map((t) => (
+        <div key={t.id} className={`live-popover-row ${t.running ? "is-running" : ""} ${t.id === currentTargetId ? "is-current" : ""}`}>
+          <span className="live-popover-dot" />
+          <span className="live-popover-name">
+            {t.program && <span className="dim">{t.program} / </span>}
+            {t.focus}
+          </span>
+          <span className="live-popover-state">{runSummary(t)}</span>
+          {t.startedAt && <span className="live-popover-since">run started {fmtDateTime(t.startedAt)}</span>}
+        </div>
+      ))}
+      <div className="live-popover-note">inferred from the collector's readings, at most one poll old</div>
+    </div>
+  );
+}
+
+export default function Header({ liveState, latestAt, hasSession, scope, targets = [], currentTargetId = null, onHome, onToggleMenu }) {
   const cls = `live-indicator is-${liveState}`;
   const goHome = (e) => {
     e.preventDefault();
@@ -43,10 +77,11 @@ export default function Header({ liveState, latestAt, hasSession, scope, onHome,
         <span className="brand-sub">Fuzzing disclosure bulletin</span>
       </div>
       <div className="header-right">
-        <div className={cls} title={`Fuzzer activity for ${scope}, inferred from the last recorded reading`}>
+        <div className={cls} tabIndex={0} aria-label={`Fuzzer activity for ${scope}`}>
           <span className="live-dot" />
           <span>{liveLabel(liveState, hasSession)}</span>
           {latestAt && <span className="live-since">· {fmtRelative(latestAt)}</span>}
+          <LivePopover targets={targets} currentTargetId={currentTargetId} />
         </div>
         <div className="icon-links">
           <a className="icon-link" href={GITHUB_URL} target="_blank" rel="noreferrer" aria-label="GitHub">

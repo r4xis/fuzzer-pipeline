@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { fetchCrashes, fetchSessionHistory, fetchSessionInstances } from "./api/client";
+import { fetchAllTargets, fetchCrashes, fetchSessionHistory, fetchSessionInstances } from "./api/client";
 
 const LIVE_WINDOW_MS = 20 * 60 * 1000;
 const SESSION_POLL_MS = 5 * 60 * 1000;
@@ -61,7 +61,10 @@ function latestTimestamp(history, instances) {
   return max || null;
 }
 
-export function useSessionData(sessionId) {
+// `run` is the target's entry from useFleetLive (the API's view of whether
+// its latest session is running). Until that has loaded, the state is
+// inferred from the readings themselves.
+export function useSessionData(sessionId, run = null) {
   const enabled = sessionId !== null && sessionId !== undefined;
   const history = usePolled(() => fetchSessionHistory(sessionId), ["history", sessionId], SESSION_POLL_MS, { enabled });
   const instances = usePolled(() => fetchSessionInstances(sessionId), ["instances", sessionId], SESSION_POLL_MS, { enabled });
@@ -72,7 +75,9 @@ export function useSessionData(sessionId) {
   const observedAt = Math.max(history.fetchedAt || 0, instances.fetchedAt || 0) || null;
 
   let liveState = "unknown";
-  if (enabled && latestAt && observedAt) {
+  if (enabled && run) {
+    liveState = runLiveState(run);
+  } else if (enabled && latestAt && observedAt) {
     liveState = observedAt - latestAt < LIVE_WINDOW_MS ? "live" : "closed";
   }
 
@@ -82,31 +87,49 @@ export function useSessionData(sessionId) {
     instances: instances.data,
     loading: history.loading || instances.loading,
     error: history.error || instances.error,
-    latestAt,
+    latestAt: run && run.latestAt ? run.latestAt : latestAt,
+    startedAt: run ? run.startedAt : null,
+    endedAt: run ? run.endedAt : null,
     liveState,
   };
 }
 
-// Live/closed state across every target, for the header when nothing is
-// selected: the newest reading from any target's latest session.
-export function useFleetLive(tree) {
-  const sessionIds = tree
-    ? tree.flatMap((e) => e.targets.map((t) => t.latest_session_id).filter((id) => id !== null && id !== undefined))
-    : [];
-  const enabled = sessionIds.length > 0;
-  const { data, fetchedAt } = usePolled(
-    () => Promise.all(sessionIds.map((id) => fetchSessionHistory(id).catch(() => []))),
-    ["fleet", sessionIds.join(",")],
-    SESSION_POLL_MS,
-    { enabled },
-  );
+function runLiveState(run) {
+  if (run.running) return "live";
+  return run.latestAt ? "closed" : "unknown";
+}
 
-  const latestAt = data ? latestTimestamp(data.flat(), null) : null;
+// Run state of every target, from the latest-session fields on /targets:
+// which targets are being fuzzed right now, and when the others last were.
+// Feeds the header indicator (fleet-wide on the index, one target when
+// selected) and its hover list.
+export function useFleetLive(tree) {
+  const enabled = !!tree && tree.some((e) => e.targets.length > 0);
+  const { data } = usePolled(fetchAllTargets, ["fleet"], SESSION_POLL_MS, { enabled });
+
+  const programOf = new Map(tree ? tree.flatMap((e) => e.targets.map((t) => [t.id, e.program.name])) : []);
+  const targets = (data || [])
+    .filter((t) => t.latest_session_id !== null && t.latest_session_id !== undefined)
+    .map((t) => ({
+      id: t.id,
+      program: programOf.get(t.id) || "",
+      focus: t.focus,
+      running: Boolean(t.running),
+      latestAt: t.latest_reading_at ? new Date(t.latest_reading_at).getTime() || null : null,
+      startedAt: t.latest_session_started_at,
+      endedAt: t.latest_session_ended_at,
+    }))
+    .sort((a, b) => Number(b.running) - Number(a.running) || (b.latestAt || 0) - (a.latestAt || 0));
+
+  const running = targets.filter((t) => t.running);
+  const withReadings = targets.filter((t) => t.latestAt);
+  const latestAt = (running.length ? running : withReadings).reduce((m, t) => Math.max(m, t.latestAt || 0), 0) || null;
+
   let liveState = "unknown";
-  if (enabled && latestAt && fetchedAt) {
-    liveState = fetchedAt - latestAt < LIVE_WINDOW_MS ? "live" : "closed";
-  }
-  return { enabled, latestAt, liveState };
+  if (enabled && data) liveState = running.length ? "live" : withReadings.length ? "idle" : "unknown";
+
+  const byId = new Map(targets.map((t) => [t.id, t]));
+  return { enabled, loaded: Boolean(data), latestAt, liveState, targets, running, byId };
 }
 
 // Watches a target's crash count; bumps spikeKey when it grows between polls.

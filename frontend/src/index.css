@@ -143,6 +143,77 @@ button { font: inherit; color: inherit; }
 .live-indicator.is-live { color: var(--phosphor); }
 .live-indicator.is-closed .live-dot { background: var(--danger); }
 .live-indicator.is-closed { color: var(--danger); }
+/* Nothing running anywhere: grey, no alarm. */
+.live-indicator.is-idle .live-dot { background: var(--text-faint); }
+.live-indicator.is-idle { color: var(--text-muted); }
+
+/* Hover/focus list of every target's run state. */
+.live-indicator { position: relative; cursor: default; outline: none; }
+.live-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 30;
+  min-width: 300px;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  color: var(--text);
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: opacity 0.12s ease, transform 0.12s ease, visibility 0.12s;
+}
+.live-indicator:hover .live-popover,
+.live-indicator:focus-within .live-popover {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+}
+.live-popover-title {
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.66rem;
+  padding-bottom: 8px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+.live-popover-row {
+  display: grid;
+  grid-template-columns: 8px 1fr;
+  column-gap: 8px;
+  padding: 5px 0;
+  color: var(--text-muted);
+}
+.live-popover-row.is-current .live-popover-name { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line-strong); }
+.live-popover-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+.live-popover-row.is-running .live-popover-dot { background: var(--phosphor); box-shadow: 0 0 0 3px var(--phosphor-glow); }
+.live-popover-row.is-running { color: var(--text); }
+.live-popover-row.is-running .live-popover-state { color: var(--phosphor); }
+.live-popover-name { grid-column: 2; color: var(--text); }
+.live-popover-name .dim { color: var(--text-muted); }
+.live-popover-state, .live-popover-since { grid-column: 2; }
+.live-popover-since { color: var(--text-faint); }
+.live-popover-empty { color: var(--text-faint); padding: 4px 0; }
+.live-popover-note {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+  color: var(--text-faint);
+  font-size: 0.64rem;
+}
 
 .live-since {
   color: var(--text-faint);

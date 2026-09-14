@@ -52,12 +52,24 @@ Invoked by cron as `update_session_stats.py <target_id>`.
    lifetime execs/s and crashes saved. Blocks without those fields (an
    instance that is "dead or running remotely") are skipped.
 4. `get_or_create_session()` picks the target's most recent `sessions` row
-   or creates one.
+   or creates one, and reconciles it with the run in progress using the
+   master's `start_time` from `fuzzer_stats` (stored as
+   `sessions.fuzzer_started_at`): same start → the run continues; a
+   different start → the fuzzers were restarted for the same target, so the
+   session's `coverage_history` and `fuzzer_instances` rows are deleted and
+   its clock reset, while its `crashes` stay attached (a repeat of an already
+   recorded site is not a new finding).
 5. `record_session_stats()` updates the session's `coverage_pct` /
    `total_execs` **and** appends a `coverage_history` row;
    `record_instance_stats()` appends one `fuzzer_instances` row per parsed
-   instance. Nothing is ever overwritten, which is what makes the coverage
-   charts possible.
+   instance. Within a run nothing is ever overwritten, which is what makes
+   the coverage charts possible.
+
+Before any of that, `master_running()` checks the master container with
+`docker inspect`. When it is not running the script only sets `ended_at`
+on the target's latest session and exits 0: the readings stay in the
+database, so the site keeps showing the last run's charts after the fuzzer
+containers have been stopped.
 
 Connection settings: `127.0.0.1:5432`, database `fuzzer_db`, user `fuzzer`,
 password from `FUZZER_DB_PASSWORD`.
@@ -103,8 +115,11 @@ Tables (see the schema diagram):
 - `programs` — the library under test (`name` unique, `repo_url`).
 - `targets` — one per fuzzed input format / harness of a program
   (`focus`, `harness_version`, `created_at`).
-- `sessions` — one fuzzing run of a target; the latest session is what the
-  API and collectors work with.
+- `sessions` — the current fuzzing run of a target (`started_at`,
+  `fuzzer_started_at` = the AFL++ master's start time, `ended_at` set by the
+  collector when the master container is gone); the latest session is what
+  the API and collectors work with, and a restart for the same target resets
+  its readings in place rather than creating a new row.
 - `coverage_history` — session-level `coverage_pct` / `total_execs` per
   reading.
 - `fuzzer_instances` — per-instance `coverage_pct`, `execs_per_sec`,
@@ -128,7 +143,8 @@ serialise directly to JSON. CORS allows `GET` from the Vite dev origins only.
 | Endpoint | Behaviour |
 | --- | --- |
 | `GET /programs` | all programs, by name |
-| `GET /targets?program_id=` | targets with `created_at` and `latest_session_id` — a correlated subquery for the newest session of each target, which is how the frontend reaches the session-keyed endpoints |
+| `GET /targets?program_id=` | targets with `created_at` and the state of each target's newest session: `latest_session_id` (how the frontend reaches the session-keyed endpoints), `latest_session_started_at`, `latest_session_ended_at`, `latest_reading_at` and `running` — true while `ended_at` is unset and the newest `coverage_history` reading is younger than `RUNNING_WINDOW` (20 minutes) |
+| `GET /sessions/{id}` | the session row plus the same `latest_reading_at` / `running` fields |
 | `GET /crashes` | `DISTINCT ON (crash_line)` keeping the earliest finding per site, then ordered newest-first; `visibility=private` returns every site (admin view), otherwise only `public`; optional `status` and `target_id` filters (the latter joins through `sessions` → `targets`) |
 | `GET /crashes/{id}` | full row; `visibility=private` unlocks non-public rows, otherwise 403 |
 | `GET /crashes/{id}/download` | `FileResponse` of `poc_file_path` for `public` rows; 403 if not public, 410 if the file is missing |
@@ -149,15 +165,19 @@ a single `selection` object in `App.jsx`.
   retrying every 8 s while the API is unreachable, and keeps
   `selection = { programId, targetId, crashId }`. From the selection it
   derives `program`, `target` and `sessionId = target.latest_session_id`.
-- `useSessionData(sessionId)` polls `/sessions/{id}/history` and
-  `/instances` every 5 minutes and derives `liveState`: **live** if the
-  newest `recorded_at` is less than 20 minutes older than the time of the
-  poll, otherwise **closed**; `unknown` when the session has no readings.
+- `useFleetLive(tree)` polls `/targets` every 5 minutes and turns the
+  latest-session fields into one entry per target (`running`, `latestAt`,
+  `startedAt`, `endedAt`). Fleet-wide `liveState` is **live** when any
+  target is running, **idle** when none is, `unknown` before any reading
+  exists.
+- `useSessionData(sessionId, run)` polls `/sessions/{id}/history` and
+  `/instances` every 5 minutes; `liveState` comes from the target's
+  `useFleetLive` entry (**live** / **closed**), falling back to the reading
+  age (newest `recorded_at` less than 20 minutes older than the poll) until
+  that has loaded.
 - `useCrashWatch(targetId)` polls the target's finding list every 45 s and
   increments `spikeKey` when the count grows — the trigger for the trace
   spike and for refreshing the visible list.
-- `useFleetLive(tree)` does the same live/closed derivation across every
-  target's latest session, for the header when nothing is selected.
 - `usePolled()` underlies the three hooks: results are tagged with the
   identity they were fetched for, so changing target reads as "loading"
   without a synchronous reset, and late responses for an old identity are
@@ -169,12 +189,12 @@ a single `selection` object in `App.jsx`.
 
 | Component | Responsibility |
 | --- | --- |
-| `Header` | title (returns to the index), subtitle, live indicator (target or fleet-wide), GitHub/LinkedIn links, mobile nav toggle |
+| `Header` | title (returns to the index), subtitle, live indicator — the selected target's run (Live / Closed) or, on the index, whether anything is running (Live / grey Not running) — with a hover/focus popover listing every target's run state, GitHub/LinkedIn links, mobile nav toggle |
 | `Sidebar` | always-visible program → target tree with finding counts; a slide-in drawer under 860 px |
 | `Footer` | project blurb, pipeline link, one link per program's repository |
 | `IndexView` | landing page: programs and their targets with start date and counts |
 | `TargetList` | targets of one program |
-| `TargetOverview` | eyebrow + title with the `SignalTrace` strip beside it, stat strip (coverage, total execs, findings, reported), `CoverageChart`, `InstanceTable`, `CrashList` |
+| `TargetOverview` | eyebrow + title with the `SignalTrace` strip beside it, stat strip (coverage, total execs, findings, reported), `CoverageChart` (with a "run stopped" note once the fuzzers are gone), `InstanceTable`, `CrashList` |
 | `SignalTrace` | compact SVG strip: the selected instance's `crashes_saved` history as a dashed line (master by default, chips to switch), a transient spike drawn on `spikeKey`, flat when closed; geometry is written to the DOM from a `requestAnimationFrame` loop, not through React state |
 | `CoverageChart` | static SVG line chart, one line per instance from `/instances` (falls back to session history), y-axis scaled to the visible data's own range with padding and nice ticks, legend toggles instances |
 | `InstanceTable` | latest reading per instance; `fuzzer0` marked as master |

@@ -21,6 +21,27 @@ app.add_middleware(
 class CrashStatusUpdate(BaseModel):
     status: Literal["new", "triaged", "reported", "duplicate"]
 
+# A session counts as running while it has not been marked ended by the
+# collector and its newest reading is younger than this. The collector runs
+# every 15 minutes, so one missed pass still reads as running.
+RUNNING_WINDOW = "20 minutes"
+
+# Per-session run state, joined by the callers below: the newest reading time
+# and whether the run is still going.
+SESSION_STATE_SQL = f"""
+    SELECT s.id, s.target_id, s.started_at, s.ended_at, s.fuzzer_started_at,
+           s.coverage_pct, s.total_execs,
+           r.latest_reading_at,
+           (s.ended_at IS NULL
+            AND r.latest_reading_at IS NOT NULL
+            AND r.latest_reading_at > now() - interval '{RUNNING_WINDOW}') AS running
+    FROM sessions s
+    LEFT JOIN LATERAL (
+        SELECT max(recorded_at) AS latest_reading_at
+        FROM coverage_history h WHERE h.session_id = s.id
+    ) r ON true
+"""
+
 DB_CONFIG = {
     "host": os.environ.get("DB_HOST", "postgres"),
     "port": int(os.environ.get("DB_PORT", 5432)),
@@ -51,13 +72,23 @@ def list_programs():
 
 @app.get("/targets")
 def list_targets(program_id: Optional[int] = None):
-    query = """
+    # Each target carries the state of its most recent session, so the
+    # frontend can tell which targets are being fuzzed right now without
+    # loading every session's readings.
+    query = f"""
         SELECT t.id, t.program_id, t.focus, t.harness_version, t.created_at,
-               (SELECT s.id FROM sessions s
-                WHERE s.target_id = t.id
-                ORDER BY s.started_at DESC NULLS LAST
-                LIMIT 1) AS latest_session_id
+               ls.id AS latest_session_id,
+               ls.started_at AS latest_session_started_at,
+               ls.ended_at AS latest_session_ended_at,
+               ls.latest_reading_at,
+               COALESCE(ls.running, false) AS running
         FROM targets t
+        LEFT JOIN LATERAL (
+            SELECT * FROM ({SESSION_STATE_SQL}) st
+            WHERE st.target_id = t.id
+            ORDER BY st.started_at DESC NULLS LAST, st.id DESC
+            LIMIT 1
+        ) ls ON true
         WHERE 1=1
     """
     params = []
@@ -72,6 +103,18 @@ def list_targets(program_id: Optional[int] = None):
         rows = cur.fetchall()
     conn.close()
     return {"targets": rows}
+
+
+@app.get("/sessions/{session_id}")
+def get_session(session_id: int):
+    conn = get_connection()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute(f"SELECT * FROM ({SESSION_STATE_SQL}) st WHERE st.id = %s", (session_id,))
+        row = cur.fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return row
 
 
 @app.get("/sessions/{session_id}/history")

@@ -60,9 +60,11 @@ export default function App() {
   const target = programEntry ? programEntry.targets.find((t) => t.id === selection.targetId) || null : null;
   const sessionId = target ? target.latest_session_id ?? null : null;
 
-  const session = useSessionData(sessionId);
-  const crashWatch = useCrashWatch(target ? target.id : null);
   const fleet = useFleetLive(tree);
+  const session = useSessionData(sessionId, target ? fleet.byId.get(target.id) || null : null);
+  const crashWatch = useCrashWatch(target ? target.id : null);
+  // The header shows the selected target's run when one is open, otherwise
+  // whether anything at all is being fuzzed; its hover list is always fleet-wide.
   const live = target
     ? { liveState: session.liveState, latestAt: session.latestAt, hasSession: session.enabled, scope: target.focus }
     : { liveState: fleet.liveState, latestAt: fleet.latestAt, hasSession: fleet.enabled, scope: "all targets" };
@@ -132,6 +134,8 @@ export default function App() {
         latestAt={live.latestAt}
         hasSession={live.hasSession}
         scope={live.scope}
+        targets={fleet.targets}
+        currentTargetId={target ? target.id : null}
         onHome={clearAll}
         onToggleMenu={() => setNavOpen((o) => !o)}
       />

@@ -48,7 +48,8 @@ src/
   format.js               number/date formatting helpers
   api/client.js           thin fetch wrappers over the backend endpoints
   components/
-    Header.jsx            title, LIVE/CLOSED indicator, social links, mobile nav toggle
+    Header.jsx            title, LIVE / CLOSED / NOT RUNNING indicator with a hover list of every
+                          target's run state, social links, mobile nav toggle
     Sidebar.jsx           persistent program → target tree
     Footer.jsx            project description and links
     SignalTrace.jsx       compact oscilloscope strip on the target page showing the selected
@@ -67,10 +68,17 @@ src/
 
 ## Behaviour notes
 
-- **LIVE / CLOSED** is inferred: if the newest `recorded_at` for the selected
-  target's session (from `/sessions/{id}/history` or `/instances`) is less
-  than 20 minutes old at the time of the last poll, the target is LIVE.
-  Session data is polled every 5 minutes.
+- **LIVE / CLOSED / NOT RUNNING** comes from the `running` flag the API puts
+  on each target's latest session (`/targets`, polled every 5 minutes): no
+  `ended_at` and a reading less than 20 minutes old. A selected target shows
+  LIVE or CLOSED; the index shows LIVE if any target is running and a grey
+  NOT RUNNING otherwise. Hovering (or focusing) the indicator lists every
+  target with its state, last reading and run start. Until `/targets` has
+  answered, the target state falls back to the age of its newest reading.
+- **Charts outlive the fuzzers**: readings stay in the database when the
+  containers stop, so a closed target still shows its last run, with a
+  "run stopped" note on the coverage chart. Restarting the fuzzers for the
+  same target resets that run's readings (findings are kept).
 - **Coverage chart** plots `/sessions/{id}/instances` as one line per
   instance; the legend toggles instances. It falls back to the session-level
   history when no per-instance readings exist.
@@ -80,7 +88,8 @@ src/
 - **Target → session mapping** comes from `latest_session_id` on the
   `/targets` response. That field is added by `api/main.py` (a subquery for
   the target's most recent session); without it, coverage, instances and the
-  live indicator fall back to a "no session" state.
+  live indicator fall back to a "no session" state. `fetchAllTargets()`
+  (`/targets` without a program) feeds the fleet-wide indicator.
 - **Read-only**: the UI never changes finding status or visibility. Those are
   set on the backend; `status` is `new` until a finding has been reported,
   then `reported`, at which point its `report_url` is shown and the technical

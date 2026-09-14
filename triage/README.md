@@ -17,6 +17,14 @@ Runs `afl-whatsup` inside the master container and records:
 
 If no session exists for the target one is created.
 
+The session follows the run: the master's `start_time` from `fuzzer_stats`
+is kept in `sessions.fuzzer_started_at`. A different start on a later pass
+means the fuzzers were restarted for the same target — the session's
+`coverage_history` and `fuzzer_instances` rows are deleted and its clock
+reset, its findings stay. If the master container is not running at all
+(`docker inspect`), the script sets `ended_at` on the latest session, leaves
+the readings in place (the site keeps showing the last run) and exits 0.
+
 ## triage.py `<casr_output_dir> <session_id>`
 
 Ingests CASR `.casrep` reports produced from AFL++ crashes:

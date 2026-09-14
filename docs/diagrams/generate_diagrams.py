@@ -100,7 +100,7 @@ def db_schema():
     programs = [("id", "serial", "PK"), ("name", "text", "UQ"), ("repo_url", "text", ""), ("created_at", "timestamptz", "")]
     targets = [("id", "serial", "PK"), ("program_id", "int → programs", "FK"), ("focus", "text", ""), ("commit_hash", "text", ""), ("harness_version", "text", ""), ("created_at", "timestamptz", "")]
     crash_targets = [("crash_id", "int → crashes", "FK"), ("target_id", "int → targets", "FK")]
-    sessions = [("id", "serial", "PK"), ("target_id", "int → targets", "FK"), ("started_at", "timestamptz", ""), ("ended_at", "timestamptz", ""), ("seed_count", "int", ""), ("total_execs", "bigint", ""), ("coverage_pct", "numeric(5,2)", "")]
+    sessions = [("id", "serial", "PK"), ("target_id", "int → targets", "FK"), ("started_at", "timestamptz", ""), ("ended_at", "timestamptz", ""), ("fuzzer_started_at", "timestamptz", ""), ("seed_count", "int", ""), ("total_execs", "bigint", ""), ("coverage_pct", "numeric(5,2)", "")]
     coverage_history = [("id", "serial", "PK"), ("session_id", "int → sessions", "FK"), ("recorded_at", "timestamptz", ""), ("coverage_pct", "numeric(5,2)", ""), ("total_execs", "bigint", "")]
     fuzzer_instances = [("id", "serial", "PK"), ("session_id", "int → sessions", "FK"), ("instance_name", "text", ""), ("coverage_pct", "numeric(5,2)", ""), ("execs_per_sec", "numeric(10,2)", ""), ("crashes_saved", "int", ""), ("recorded_at", "timestamptz", "")]
     crashes = [
@@ -181,9 +181,9 @@ def frontend_components():
     svg.text(40, 246, "hooks.js", size=12, font=SANS, color=C_MUTED)
     hooks = [
         ("usePolled(fetcher, identity, interval)", "fetch now + every N ms, results tagged by identity"),
-        ("useSessionData(sessionId)", "history + instances / 5 min → liveState (< 20 min)"),
+        ("useSessionData(sessionId, run)", "history + instances / 5 min; liveState from run"),
         ("useCrashWatch(targetId)", "crash list every 45 s → count, spikeKey on increase"),
-        ("useFleetLive(tree)", "newest reading across all targets → index live state"),
+        ("useFleetLive(tree)", "/targets / 5 min → running per target, fleet live/idle"),
         ("useElementWidth()", "ResizeObserver via callback ref (chart width)"),
         ("useMediaQuery(query)", "useSyncExternalStore (reduced motion)"),
     ]
@@ -194,10 +194,12 @@ def frontend_components():
     # api client
     box(svg, 460, 430, 900, 220, "api/client.js", [
         "fetchPrograms()                 GET /programs",
-        "fetchTargets(programId)         GET /targets?program_id=          (+ created_at, latest_session_id)",
+        "fetchTargets(programId)         GET /targets?program_id=          (+ latest session state, running)",
+        "fetchAllTargets()               GET /targets                      every target, for the fleet indicator",
         "fetchProgramTree()              programs + their targets, for sidebar and index",
         "fetchCrashes(targetId, {status}) GET /crashes?visibility=private&target_id=&status=   one row per crash site",
         "fetchCrashDetail(id)            GET /crashes/{id}?visibility=private",
+        "fetchSession(id)                GET /sessions/{id}",
         "fetchSessionHistory(id)         GET /sessions/{id}/history",
         "fetchSessionInstances(id)       GET /sessions/{id}/instances",
         "downloadUrl(id)                 GET /crashes/{id}/download        (public rows only)",

@@ -16,6 +16,13 @@ export async function fetchTargets(programId) {
   return data.targets;
 }
 
+// Every target with the state of its latest session (running, last
+// reading, run start/end); the fleet-wide live indicator polls this.
+export async function fetchAllTargets() {
+  const data = await getJson("/targets");
+  return data.targets;
+}
+
 export async function fetchProgramTree() {
   const programs = await fetchPrograms();
   const targetLists = await Promise.all(programs.map((p) => fetchTargets(p.id)));
@@ -31,6 +38,10 @@ export async function fetchCrashes(targetId, { status } = {}) {
 
 export async function fetchCrashDetail(id) {
   return getJson(`/crashes/${id}?visibility=private`);
+}
+
+export async function fetchSession(sessionId) {
+  return getJson(`/sessions/${sessionId}`);
 }
 
 export async function fetchSessionHistory(sessionId) {
