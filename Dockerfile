@@ -19,8 +19,8 @@ RUN cd /src/libgme && \
     make -j$(nproc) && \
     make install
 
-COPY harness/fuzz_vgm.cpp /fuzzing/
-RUN afl-c++ -O3 -o /fuzzing/harness /fuzzing/fuzz_vgm.cpp \
+COPY harness/fuzz_hes.cpp /fuzzing/
+RUN afl-c++ -O3 -o /fuzzing/harness /fuzzing/fuzz_hes.cpp \
     -I/fuzzing/libgme_inst/include \
     -L/fuzzing/libgme_inst/lib \
     -lgme -lstdc++ \
