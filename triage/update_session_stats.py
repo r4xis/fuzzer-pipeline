@@ -109,6 +109,7 @@ INSTANCE_HEADER_RE = re.compile(r">>>.*?instance:\s*(\S+).*?<<<")
 INSTANCE_COVERAGE_RE = re.compile(r"coverage\s*:?\s*([\d.]+)%")
 INSTANCE_SPEED_RE = re.compile(r"lifetime speed\s+([\d.]+)\s*execs/sec")
 INSTANCE_CRASHES_RE = re.compile(r"crashes saved\s+(\d+)")
+INSTANCE_NO_CRASHES_RE = re.compile(r"no crashes yet")
 
 
 def parse_instances(text: str) -> List[InstanceStats]:
@@ -133,8 +134,17 @@ def parse_instances(text: str) -> List[InstanceStats]:
         speed_match = INSTANCE_SPEED_RE.search(block)
         crashes_match = INSTANCE_CRASHES_RE.search(block)
 
-        if not (coverage_match and speed_match and crashes_match):
+        if crashes_match:
+            crashes_saved = int(crashes_match.group(1))
+        elif INSTANCE_NO_CRASHES_RE.search(block):
+            # afl-whatsup drops "crashes saved N" entirely and prints "no
+            # crashes yet" once the instance's count is zero.
+            crashes_saved = 0
+        else:
             # e.g. "Instance is dead or running remotely, skipping."
+            crashes_saved = None
+
+        if not (coverage_match and speed_match and crashes_saved is not None):
             continue
 
         instances.append(
@@ -142,7 +152,7 @@ def parse_instances(text: str) -> List[InstanceStats]:
                 instance_name=name,
                 coverage_pct=float(coverage_match.group(1)),
                 execs_per_sec=float(speed_match.group(1)),
-                crashes_saved=int(crashes_match.group(1)),
+                crashes_saved=crashes_saved,
             )
         )
     return instances
