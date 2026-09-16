@@ -32,11 +32,22 @@ automatically, and the PoC archive directory follows the target's `focus`.
 ```
 cd ~/fuzzer-pipeline
 docker compose stop fuzzer0 fuzzer1 fuzzer2 fuzzer3
-sudo mv /data/afl-output /data/afl-output.<old-focus>.$(date +%F)
 ```
 
 AFL++ output must not be shared between campaigns: crash files of the old
-target would otherwise be triaged into the new target's session.
+target would otherwise be triaged into the new target's session. What to do
+with it depends on why the campaign stopped:
+
+- **Switching to another target, same project still active** (e.g. NSF →
+  VGM): archive it apart so it stays available for reference —
+  `sudo mv /data/afl-output /data/afl-output.<old-focus>.$(date +%F)`.
+- **Closing a target down** (fuzzing on it is done for good, as with HES
+  above): delete it outright — `sudo rm -rf /data/afl-output` and any
+  target-specific seed/crafted directories. CASR has already triaged real
+  findings into `crashes` and `/data/poc_archive/<focus>/`, which are
+  permanent; the raw queue/crashes/hangs directories are working state with
+  no disclosure value once triage has run, so keeping them around is not
+  worth the disk space.
 
 ### 3. Register the target
 
