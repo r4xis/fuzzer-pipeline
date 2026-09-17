@@ -13,7 +13,10 @@ Runs `afl-whatsup` inside the master container and records:
   the history is never overwritten;
 - one `fuzzer_instances` row per live instance (`fuzzer0` = master,
   `fuzzerN` = secondary) with its coverage, execs/s and crashes saved.
-  Dead or remote instances are skipped.
+  Dead or remote instances are skipped. `afl-whatsup` prints `crashes saved
+  N` only once an instance's count is nonzero, and `no crashes yet`
+  otherwise — the parser must treat both as a live, parseable instance (the
+  latter as zero), or every instance with no crashes yet reads as dead.
 
 If no session exists for the target one is created.
 
