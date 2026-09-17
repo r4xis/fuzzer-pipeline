@@ -143,6 +143,7 @@ export default function App() {
         tree={tree}
         treeError={treeError}
         counts={counts}
+        fleetById={fleet.byId}
         onRetry={retryTree}
         selection={selection}
         onSelectProgram={selectProgram}

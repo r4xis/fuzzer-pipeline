@@ -46,20 +46,19 @@ function normalisedShape(series) {
   return shape;
 }
 
-function buildPath(shape, amp, phase, spikeAge) {
+function buildPath(shape, phase, spikeAge) {
   const pts = [];
   const spikeCenter = Math.round(N * 0.62);
   const spikeEnv = spikeAge === null ? 0 : Math.exp(-spikeAge / 420);
 
   for (let i = 0; i < N; i++) {
     const x = (i / (N - 1)) * W;
-    let y;
+    // No reading history yet: a flat line at 0, same dashed/flowing
+    // treatment as HES/VGM once they have data — not a decorative wave.
+    let y = MID;
     if (shape) {
       const ripple = Math.sin(phase * 1.6 + i * 0.35) * 1.2;
       y = MID - shape[i] * DATA_AMP + ripple;
-    } else {
-      const base = Math.sin(phase + i * 0.21) * 0.6 + Math.sin(phase * 0.63 + i * 0.077) * 0.4;
-      y = MID + base * amp;
     }
     if (spikeEnv > 0.01) {
       const d = i - spikeCenter;
@@ -108,20 +107,17 @@ export default function SignalTrace({ instances, spikeKey, live }) {
     const shape = normalisedShape(seriesKey ? seriesKey.split(",").map(Number) : null);
 
     if (reduceMotion) {
-      el.setAttribute("d", buildPath(shape, live ? 6 : 1, 0.8, null));
+      el.setAttribute("d", buildPath(shape, 0.8, null));
       return undefined;
     }
 
     let raf = 0;
-    let amp = live ? 7 : 1.2;
     let phase = 0;
     let last = null;
 
     const frame = (now) => {
       const dt = last === null ? 16 : Math.min(64, now - last);
       last = now;
-      const targetAmp = live ? 7 : 1.2;
-      amp += (targetAmp - amp) * 0.04;
       phase += dt * (live ? 0.0026 : 0.0011);
 
       let age = null;
@@ -132,7 +128,7 @@ export default function SignalTrace({ instances, spikeKey, live }) {
           age = null;
         }
       }
-      el.setAttribute("d", buildPath(shape, amp, phase, age));
+      el.setAttribute("d", buildPath(shape, phase, age));
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
@@ -140,7 +136,7 @@ export default function SignalTrace({ instances, spikeKey, live }) {
   }, [live, reduceMotion, seriesKey]);
 
   const latest = series && series.length ? series[series.length - 1] : null;
-  const svgClass = ["signal-trace", live ? "is-live" : "", hasShape ? "has-data" : ""].filter(Boolean).join(" ");
+  const svgClass = ["signal-trace", live ? "is-live" : ""].filter(Boolean).join(" ");
 
   return (
     <div className="trace-strip">

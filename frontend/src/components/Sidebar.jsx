@@ -1,11 +1,12 @@
 import ApiUnreachable from "./ApiUnreachable";
 
+// "<found> · <reported> rep.", always both, so a fresh target reads "0 · 0 rep."
 function countLabel(c) {
   if (!c) return "";
-  return c.total === 0 ? "none" : `${c.total}${c.reported ? ` · ${c.reported} rep.` : ""}`;
+  return `${c.total} · ${c.reported} rep.`;
 }
 
-export default function Sidebar({ tree, treeError, counts, onRetry, selection, onSelectProgram, onSelectTarget, open, onClose }) {
+export default function Sidebar({ tree, treeError, counts, fleetById, onRetry, selection, onSelectProgram, onSelectTarget, open, onClose }) {
   return (
     <>
       <div className={`sidebar-backdrop ${open ? "open" : ""}`} onClick={onClose} />
@@ -27,17 +28,25 @@ export default function Sidebar({ tree, treeError, counts, onRetry, selection, o
                 <span>{program.name}</span>
                 <span className="nav-program-count">{targets.length} target{targets.length === 1 ? "" : "s"}</span>
               </button>
-              {targets.map((t) => (
-                <button
-                  key={t.id}
-                  className={`nav-target ${selection.targetId === t.id ? "active" : ""}`}
-                  onClick={() => onSelectTarget(program.id, t.id)}
-                  title={counts[t.id] ? `${counts[t.id].total} findings, ${counts[t.id].reported} reported` : undefined}
-                >
-                  <span className="nav-target-focus">{t.focus}</span>
-                  <span className="nav-target-meta">{countLabel(counts[t.id])}</span>
-                </button>
-              ))}
+              {targets.map((t) => {
+                const running = Boolean(fleetById?.get(t.id)?.running);
+                return (
+                  <button
+                    key={t.id}
+                    className={`nav-target ${running ? "is-running" : ""} ${selection.targetId === t.id ? "active" : ""}`}
+                    onClick={() => onSelectTarget(program.id, t.id)}
+                    title={[
+                      running ? "actively fuzzing" : "not running",
+                      counts[t.id] ? `${counts[t.id].total} findings, ${counts[t.id].reported} reported` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  >
+                    <span className="nav-target-focus">{t.focus}</span>
+                    <span className="nav-target-meta">{countLabel(counts[t.id])}</span>
+                  </button>
+                );
+              })}
             </div>
           ))}
       </aside>
