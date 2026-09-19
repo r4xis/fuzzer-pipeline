@@ -1,0 +1,53 @@
+FROM aflplusplus/aflplusplus:latest
+
+RUN apt-get update && apt-get install -y \
+    cmake \
+    git \
+    gdb \
+    && rm -rf /var/lib/apt/lists/*
+
+# CASR for crash triage - base image already has Rust/cargo installed
+RUN cargo install casr
+
+ARG LIBVGM_COMMIT=c8b998b606895990c409a512b86c5509070f9f0d
+
+WORKDIR /fuzzing
+RUN git clone --recursive https://github.com/ValleyBell/libvgm /src/libvgm && \
+    cd /src/libvgm && \
+    git checkout "$LIBVGM_COMMIT" && \
+    git submodule update --init --recursive
+
+# Build-time hardening patches. Intentionally not tracked in git (see
+# .gitignore) -- copy patches/libvgm-fuzz-hardening.patch into place next to
+# this Dockerfile before building the image.
+COPY patches/libvgm-fuzz-hardening.patch /tmp/libvgm-fuzz-hardening.patch
+RUN cd /src/libvgm && \
+    git apply --check /tmp/libvgm-fuzz-hardening.patch && \
+    git apply /tmp/libvgm-fuzz-hardening.patch
+
+# afl-clang-fast(++) + AFL_USE_ASAN=1 inline on the build/link commands only
+# (never as a persistent ENV, so it can't leak into unrelated steps).
+# -O2 -g: the existing Dockerfile's libgme build has no -g, which leaves CASR
+# without debug info for crash_line/source_context; this target keeps it.
+RUN cd /src/libvgm && \
+    CC=afl-clang-fast CXX=afl-clang-fast++ AFL_USE_ASAN=1 cmake -S . -B build-afl \
+        -DUSE_SANITIZERS=OFF -DBUILD_LIBAUDIO=OFF -DBUILD_PLAYER=OFF -DBUILD_VGM2WAV=OFF -DBUILD_TESTS=OFF \
+        -DBUILD_LIBPLAYER=ON -DBUILD_LIBEMU=ON \
+        -DCMAKE_BUILD_TYPE=None -DCMAKE_C_FLAGS="-O2 -g" -DCMAKE_CXX_FLAGS="-O2 -g" && \
+    AFL_USE_ASAN=1 cmake --build build-afl -j$(nproc)
+
+COPY harness/fuzz_libvgm_vgmplayer.cpp /fuzzing/
+RUN AFL_USE_ASAN=1 afl-clang-fast++ -O2 -g -I/src/libvgm \
+    -o /fuzzing/harness /fuzzing/fuzz_libvgm_vgmplayer.cpp \
+    /src/libvgm/build-afl/bin/libvgm-player.a \
+    /src/libvgm/build-afl/bin/libvgm-emu.a \
+    /src/libvgm/build-afl/bin/libvgm-utils.a \
+    -lz -lpthread -lm
+
+COPY dict/vgm.dict /fuzzing/dict/vgm.dict
+
+RUN { echo "libvgm_commit=$LIBVGM_COMMIT"; \
+      sha256sum /tmp/libvgm-fuzz-hardening.patch | awk '{print "patch_sha256="$1}'; \
+    } > /fuzzing/BUILD_INFO
+
+VOLUME ["/data"]

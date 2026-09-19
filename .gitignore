@@ -1,1 +1,16 @@
 .idea/
+
+# AFL++ output / fuzzing artifacts (never belong in this repo — corpora and
+# crash dirs live on the fuzzing host under /data, per docs/switching-target.md)
+out*/
+crashes/
+oracle_smoke_crashes/
+*.vgm
+
+# Python bytecode cache
+__pycache__/
+*.pyc
+
+# Build-time hardening patches: not tracked in git, moved between machines
+# by hand. See docs/switching-target.md.
+patches/

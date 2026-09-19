@@ -1,0 +1,6 @@
+magic="Vgm "
+gd3="Gd3 "
+ver150="\x50\x01\x00\x00"
+ver171="\x71\x01\x00\x00"
+end="\x66"
+datablock="\x67\x66"
