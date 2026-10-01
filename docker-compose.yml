@@ -69,7 +69,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: fuzzer
-      POSTGRES_PASSWORD: XItyYpPDg8y3hHtzipBSX2ZHAVZZA2q_
+      POSTGRES_PASSWORD: ${FUZZER_DB_PASSWORD}
       POSTGRES_DB: fuzzer_db
     volumes:
       - /data/postgres:/var/lib/postgresql/data
@@ -82,7 +82,7 @@ services:
     restart: unless-stopped
     environment:
       DB_HOST: postgres
-      FUZZER_DB_PASSWORD: XItyYpPDg8y3hHtzipBSX2ZHAVZZA2q_
+      FUZZER_DB_PASSWORD: ${FUZZER_DB_PASSWORD}
     volumes:
       - /data:/data
     depends_on:
