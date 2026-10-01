@@ -76,7 +76,7 @@ export default function CrashDetail({ id, onBack, backLabel }) {
     );
   }
 
-  const disclosed = crash.status === "reported";
+  const disclosed = crash.status === "reported" || crash.status === "duplicate";
   const downloadable = disclosed && crash.visibility === "public";
   const sev = severityLevel(crash.severity_type);
 
@@ -180,7 +180,7 @@ export default function CrashDetail({ id, onBack, backLabel }) {
               </a>
             ) : (
               <p className="download-note">
-                reported, but the PoC input is not public yet — download is enabled once visibility is set to public.
+                disclosed, but the PoC input is not public yet — download is enabled once visibility is set to public.
               </p>
             )}
           </div>

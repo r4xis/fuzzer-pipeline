@@ -199,7 +199,7 @@ a single `selection` object in `App.jsx`.
 | `CoverageChart` | static SVG line chart, one line per instance from `/instances` (falls back to session history), y-axis scaled to the visible data's own range with padding and nice ticks, legend toggles instances |
 | `InstanceTable` | latest reading per instance; `fuzzer0` marked as master |
 | `CrashList` | All / Reported tabs (the latter uses `?status=reported`), one row per finding with severity dot, status pill and date |
-| `CrashDetail` | badges and key facts for every finding; stack trace, source context (crash line highlighted), sanitizer summary and PoC download only when `status === "reported"`; download only when also `public`; shows `report_url` |
+| `CrashDetail` | badges and key facts for every finding; stack trace, source context (crash line highlighted), sanitizer summary and PoC download only when `status` is `reported` or `duplicate`; download only when also `public`; shows `report_url` |
 | `ApiUnreachable` | notice with retry, shown in place of the index and in the sidebar while the API cannot be reached |
 
 `format.js` holds number/date helpers; `index.css` holds the design tokens
@@ -210,9 +210,12 @@ ever set in callbacks and effects never call `setState` synchronously.
 ### Disclosure gating
 
 The backend decides what exists (`visibility`) and the frontend decides
-what to render (`status`): an unreported finding shows only its location,
-severity and assessment behind a "technical detail withheld" panel, whatever
-its visibility. The site has no controls that change data.
+what to render (`status`): a finding that is still `new` or `triaged` shows
+only its location, severity and assessment behind a "technical detail
+withheld" panel, whatever its visibility. `reported` and `duplicate` both
+disclose the full technical detail (PoC download still requires
+`visibility = public` on top of that). The site has no controls that change
+data.
 
 ## 7. Deployment — `.github/workflows/deploy.yml`
 
