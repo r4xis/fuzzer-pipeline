@@ -154,6 +154,26 @@ def _norm_offset(hex_digits: str) -> str:
     return f"0x{hex_digits.lower()}"
 
 
+def _first_src_frame_location(
+    stacktrace: List[str],
+    frame_matches: List[Optional[re.Match]],
+    resolved: Dict[str, Optional[Tuple[str, int, int]]],
+    build_id: str,
+) -> Optional[Tuple[str, int, int]]:
+    """CASR itself skips sanitizer-runtime frames (no /src/ debug info) when
+    picking a crash site. Walking the stack in order -- same order as the
+    Stacktrace array, innermost first -- and taking the first frame that
+    resolves under /src/ reproduces that when the crash address's own frame
+    resolves to "??"."""
+    for frame, match in zip(stacktrace, frame_matches):
+        if not match or match.group("buildid").lower() != build_id:
+            continue
+        loc = resolved.get(_norm_offset(match.group("offset")))
+        if loc and loc[0].startswith("/src/"):
+            return loc
+    return None
+
+
 def resolve_crash_site(
     crash_line: str, stacktrace: List[str], image: Optional[str], harness_path: str
 ) -> ResolveResult:
@@ -208,6 +228,13 @@ def resolve_crash_site(
 
     crash_offset = _norm_offset(module_match.group("offset"))
     crash_loc = resolved.get(crash_offset)
+    if crash_loc is None:
+        # The crash address itself is unresolvable -- typically because
+        # it's inside the sanitizer runtime, which carries no debug info.
+        # CASR works around this by walking outward through the stack to
+        # the first real application frame; do the same with what this
+        # batch already resolved.
+        crash_loc = _first_src_frame_location(stacktrace, frame_matches, resolved, actual_build_id)
     if crash_loc is None:
         return ResolveResult(
             crash_line, stacktrace, False, True,

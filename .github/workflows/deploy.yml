@@ -70,10 +70,9 @@ jobs:
             # under-count one target and fail the check for no real leak.
             # (2) no row marked withheld, in the list or in its own
             # /crashes/{id}, may carry a key outside the allowlist. (3) the
-            # derived crash_file, where present, must be a bare file name --
-            # no directory part ("/"), no line/col suffix (":"), and not
-            # just digits (which would mean a line/col number leaked in as
-            # if it were the file name).
+            # derived crash_file, where present, must never carry a line/col
+            # suffix (":") and must not be just digits (which would mean a
+            # line/col number leaked in as if it were the path).
             python3 <<'PYEOF'
             import json
             import re
@@ -85,7 +84,7 @@ jobs:
                     return json.load(r)
 
             allowed = {"id", "status", "discovered_at", "target_id", "session_id", "withheld", "crash_file"}
-            bare_file_re = re.compile(r"^[^/:]+$")
+            bare_file_re = re.compile(r"^[^:]+$")
             errors = []
 
             def check_crash_file(c, where):

@@ -34,6 +34,13 @@ RAW_FRAME = (
 RAW_FRAME_2 = (
     f"    #1 0x55d4a1b2c400 in caller_func ({HARNESS}+0x320000) (BuildId: {BUILD_ID})"
 )
+# A frame inside the sanitizer runtime (statically linked into the same
+# harness binary, so same module path and BuildId) that resolves to a real
+# location -- just not one under /src/, since compiler-rt's own sources
+# live elsewhere.
+RAW_FRAME_RUNTIME = (
+    f"    #1 0x55d4a1b2c450 in __asan_report_error ({HARNESS}+0x7f0000) (BuildId: {BUILD_ID})"
+)
 SYMBOLIZED_FRAME = "    #2 0x55d4a1b2c500 in main /src/libvgm/main.c:10:1"
 
 
@@ -136,6 +143,47 @@ class ResolveCrashSiteTest(unittest.TestCase):
         stacktrace = [RAW_FRAME]
         with patch.object(symbolize, "harness_build_id", return_value=BUILD_ID), \
              patch.object(symbolize, "symbolize_addresses", return_value={"0x31dcc4": None}):
+            result = resolve_crash_site(RAW_CRASH_LINE, stacktrace, IMAGE, HARNESS)
+
+        self.assertFalse(result.resolved)
+        self.assertTrue(result.build_id_match)
+        self.assertEqual(result.crash_line, RAW_CRASH_LINE)
+        self.assertEqual(result.stacktrace, stacktrace)
+
+    def test_unresolvable_crash_frame_falls_back_to_first_src_frame(self):
+        # #0 (the crash address) is inside the sanitizer runtime and has no
+        # debug info ("??"); #1 resolves, but not under /src/; #2 is the
+        # first real application frame. CASR itself would walk past #0/#1
+        # the same way.
+        stacktrace = [RAW_FRAME, RAW_FRAME_RUNTIME, RAW_FRAME_2]
+        resolved = {
+            "0x31dcc4": None,
+            "0x7f0000": ("/usr/lib/llvm/compiler-rt/asan_errors.cpp", 100, 1),
+            "0x320000": ("/src/libvgm/player/dblk_compr.c", 37, 15),
+        }
+        with patch.object(symbolize, "harness_build_id", return_value=BUILD_ID), \
+             patch.object(symbolize, "symbolize_addresses", return_value=resolved):
+            result = resolve_crash_site(RAW_CRASH_LINE, stacktrace, IMAGE, HARNESS)
+
+        self.assertTrue(result.resolved)
+        self.assertTrue(result.build_id_match)
+        self.assertEqual(result.crash_line, "/src/libvgm/player/dblk_compr.c:37:15")
+        # #0 couldn't be resolved at all, so it's left raw
+        self.assertEqual(result.stacktrace[0], RAW_FRAME)
+        # #1 resolved fine (just not under /src/), so it's still rewritten
+        self.assertIn("/usr/lib/llvm/compiler-rt/asan_errors.cpp:100:1", result.stacktrace[1])
+        self.assertIn("/src/libvgm/player/dblk_compr.c:37:15", result.stacktrace[2])
+
+    def test_unresolvable_crash_frame_with_no_src_frame_anywhere_keeps_raw(self):
+        # #0 is unresolvable and #1 resolves but not under /src/ -- no frame
+        # ever qualifies, so the raw CrashLine is kept.
+        stacktrace = [RAW_FRAME, RAW_FRAME_RUNTIME]
+        resolved = {
+            "0x31dcc4": None,
+            "0x7f0000": ("/usr/lib/llvm/compiler-rt/asan_errors.cpp", 100, 1),
+        }
+        with patch.object(symbolize, "harness_build_id", return_value=BUILD_ID), \
+             patch.object(symbolize, "symbolize_addresses", return_value=resolved):
             result = resolve_crash_site(RAW_CRASH_LINE, stacktrace, IMAGE, HARNESS)
 
         self.assertFalse(result.resolved)

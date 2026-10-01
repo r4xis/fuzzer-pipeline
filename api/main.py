@@ -39,11 +39,14 @@ PUBLIC_DETAIL_EXTRA_FIELDS = PUBLIC_LIST_EXTRA_FIELDS + [
 ]
 
 
-# Basename of the path in a "path:line[:col]" crash_line, or None if it's
-# missing or doesn't parse as that shape. Never exposes the line/col or any
-# directory component.
+# The path part of a crash_line, with a trailing ":line[:col]" stripped if
+# present, or None if crash_line is missing, is an unsymbolized
+# "module+0xoffset" address, or is the sanitizer's own "??" placeholder for
+# an unresolved location. Never exposes the line/column.
 def crash_file_from_line(crash_line):
     if not crash_line:
+        return None
+    if "+0x" in crash_line:
         return None
     parts = crash_line.rsplit(":", 2)
     if len(parts) == 3 and parts[1].isdigit() and parts[2].isdigit() and parts[0]:
@@ -53,8 +56,10 @@ def crash_file_from_line(crash_line):
         if len(parts) == 2 and parts[1].isdigit() and parts[0]:
             path = parts[0]
         else:
-            return None
-    return os.path.basename(path)
+            path = crash_line
+    if not path or path.startswith("??"):
+        return None
+    return path
 
 
 def redact_crash(row, public_extra_fields):

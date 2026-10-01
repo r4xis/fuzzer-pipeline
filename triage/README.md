@@ -95,19 +95,20 @@ rules) -- never run this against production from here.
 
 ## run_triage.sh
 
-The cron entry point. It resolves `AFL_MASTER_CONTAINER`'s current image
-(`docker inspect --format '{{.Image}}'`) into `CASR_IMAGE` -- falling back to
-the `FUZZER_IMAGE` tag if that can't be resolved (logged either way) -- and
-picks the active target (newest `targets` row, or `TARGET_ID` from the env
-file), runs `update_session_stats.py`, runs CASR over the AFL++ crash
-directory in `CASR_IMAGE`, then runs `triage.py` on the reports with that
-same `CASR_IMAGE` exported for it to symbolize against. CASR and
-`symbolize.py` must always run against the *same* image, master or fallback:
-a report's embedded addresses and BuildId only ever match the binary CASR
-actually reproduced the crash with, so symbolizing against any other image
-means nothing would ever resolve. Configuration comes from the repo-root
-`.env` (the same file `docker compose` reads; `FUZZER_DB_PASSWORD` plus
-optional overrides listed at the top of the script and in `.env.example`):
+The cron entry point. It sets `CASR_IMAGE` to the `FUZZER_IMAGE` tag -- not
+the AFL master container's own image, which stops existing in Docker once
+it's pruned even though the container keeps running fine (`docker run`
+against it then fails with "No such image") -- and picks the active target
+(newest `targets` row, or `TARGET_ID` from the env file), runs
+`update_session_stats.py`, runs CASR over the AFL++ crash directory in
+`CASR_IMAGE`, then runs `triage.py` on the reports with that same
+`CASR_IMAGE` exported for it to symbolize against. CASR and `symbolize.py`
+must always run against the *same* image: a report's embedded addresses and
+BuildId only ever match the binary CASR actually reproduced the crash with,
+so symbolizing against any other image means nothing would ever resolve.
+Configuration comes from the repo-root `.env` (the same file `docker
+compose` reads; `FUZZER_DB_PASSWORD` plus optional overrides listed at the
+top of the script and in `.env.example`):
 
 ```
 */15 * * * * /home/opc/fuzzer-pipeline/triage/run_triage.sh

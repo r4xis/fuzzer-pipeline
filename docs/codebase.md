@@ -111,11 +111,11 @@ been run over the AFL++ crash directory.
 `triage/run_triage.sh` is the cron entry point that ties the scripts
 together: it selects the active target (newest `targets` row unless
 `TARGET_ID` is set in the repo-root `.env`), runs the collector, runs CASR
-in `CASR_IMAGE` — the AFL master container's current image, resolved fresh
-each run via `docker inspect`, falling back to the `FUZZER_IMAGE` tag only
-if that can't be resolved — and then the ingestion, passing that same
-`CASR_IMAGE` through so offline symbolization always runs against the exact
-image CASR just used.
+in `CASR_IMAGE` (the `FUZZER_IMAGE` tag — not the AFL master container's own
+image, which stops existing in Docker once pruned even though the container
+keeps running) and then the ingestion, passing that same `CASR_IMAGE`
+through so offline symbolization always runs against the exact image CASR
+just used.
 
 ## 4. Database — `db/`
 

@@ -19,7 +19,7 @@ frontend (CORS allows `GET` only) and exists for operator tooling.
 | GET | `/sessions/{id}/instances` | per-instance readings (`fuzzer0` master, `fuzzerN` secondaries), oldest first |
 | PATCH | `/crashes/{id}/status` | body `{"status": "new" \| "triaged" \| "reported" \| "duplicate"}` |
 
-In `PUBLIC_MODE`, a non-public row is redacted to `{id, status, discovered_at, target_id, session_id, withheld: true, crash_file}` instead of 403/404. `crash_file` is the basename of `crash_line`'s path part (e.g. `dblk_compr.c`), or `null` if `crash_line` is unset or doesn't parse as `path:line[:col]`; it never carries the line/column or any directory.
+In `PUBLIC_MODE`, a non-public row is redacted to `{id, status, discovered_at, target_id, session_id, withheld: true, crash_file}` instead of 403/404. `crash_file` is `crash_line` with the trailing `:line[:col]` stripped (e.g. `/src/libvgm/player/dblk_compr.c`), or `null` if `crash_line` is unset, an unsymbolized `module+0xoffset` address, or the sanitizer's own unresolved `??` placeholder; it never carries the line/column.
 
 ## Configuration
 
