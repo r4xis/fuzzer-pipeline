@@ -111,7 +111,8 @@ The cron job runs `triage/run_triage.sh` from the repository checkout:
 */15 * * * * /home/opc/fuzzer-pipeline/triage/run_triage.sh
 ```
 
-It reads `/data/fuzzer-pipeline.env` (not in the repository, mode 600):
+It reads the repo-root `.env` (gitignored, mode 600) — the same file
+`docker compose` reads (see `.env.example` for the full key list):
 
 ```
 FUZZER_DB_PASSWORD=...

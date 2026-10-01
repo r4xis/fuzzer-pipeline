@@ -5,14 +5,14 @@
 # The active target is the newest row in `targets` — registering a new target
 # in the database is enough to switch. Set TARGET_ID to override.
 #
-# Secrets and host-specific paths come from an env file outside the repo
-# (default /data/fuzzer-pipeline.env), which must define FUZZER_DB_PASSWORD
-# and may override: TARGET_ID, AFL_OUTPUT, CASR_OUTPUT, LOG_FILE,
-# DB_CONTAINER, FUZZER_IMAGE, HARNESS, POC_ARCHIVE_ROOT, AFL_MASTER_CONTAINER.
+# Secrets and host-specific paths come from the repo-root .env (same file
+# docker compose reads), which must define FUZZER_DB_PASSWORD and may
+# override: TARGET_ID, AFL_OUTPUT, CASR_OUTPUT, LOG_FILE, DB_CONTAINER,
+# FUZZER_IMAGE, HARNESS, POC_ARCHIVE_ROOT, AFL_MASTER_CONTAINER.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_FILE="${FUZZER_ENV_FILE:-/data/fuzzer-pipeline.env}"
+ENV_FILE="${FUZZER_ENV_FILE:-$REPO_DIR/.env}"
 if [ -f "$ENV_FILE" ]; then
   set -a
   # shellcheck disable=SC1090

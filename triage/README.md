@@ -48,9 +48,9 @@ New findings start as `status = 'new'`, `visibility = 'private'`.
 The cron entry point. It picks the active target (newest `targets` row, or
 `TARGET_ID` from the env file), runs `update_session_stats.py`, runs CASR
 over the AFL++ crash directory in the fuzzer image, then runs `triage.py`
-on the reports. Configuration comes from `/data/fuzzer-pipeline.env`
-(`FUZZER_DB_PASSWORD` plus optional overrides listed at the top of the
-script):
+on the reports. Configuration comes from the repo-root `.env` (the same file
+`docker compose` reads; `FUZZER_DB_PASSWORD` plus optional overrides listed
+at the top of the script and in `.env.example`):
 
 ```
 */15 * * * * /home/opc/fuzzer-pipeline/triage/run_triage.sh

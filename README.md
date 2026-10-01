@@ -88,7 +88,8 @@ for the shared volume, and Python 3 with `psycopg2` for the triage scripts.
 
 ```
 # 1. database, API and fuzzers
-export FUZZER_DB_PASSWORD=...        # also referenced by docker-compose.yml
+cp .env.example .env && chmod 600 .env && $EDITOR .env   # set FUZZER_DB_PASSWORD; same file docker compose and triage/run_triage.sh read
+set -a && . .env && set +a            # export it into this shell for the migration step below
 docker compose up -d postgres api
 python3 db/run_migrations.py          # DB_HOST/DB_PORT/FUZZER_DB_PASSWORD from env
 docker compose up -d                  # start the fuzzers once a seed corpus is in /data
@@ -98,7 +99,6 @@ psql ... -c "INSERT INTO programs (name, repo_url) VALUES ('<program>', '<url>')
 psql ... -c "INSERT INTO targets (program_id, focus, harness_version) VALUES (1, '<FORMAT>', '<harness tag>');"
 
 # 3. collect statistics and triage crashes every 15 minutes
-echo "FUZZER_DB_PASSWORD=..." > /data/fuzzer-pipeline.env && chmod 600 /data/fuzzer-pipeline.env
 */15 * * * * /path/to/fuzzer-pipeline/triage/run_triage.sh   # newest target row is the active one
 ```
 

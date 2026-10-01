@@ -32,7 +32,10 @@ All fuzzers share the host's `/data` volume:
 | `/data/<seeds>/` | the seed corpus passed with `-i` |
 | `/data/poc_archive/<focus>/` | archived crashing inputs, one file per finding |
 | `/data/backups/` | database dumps and archive tarballs taken before maintenance |
-| `/data/fuzzer-pipeline.env` | host-side secrets/overrides read by `triage/run_triage.sh` (not in the repository) |
+
+Secrets and host-specific overrides live in the repo-root `.env` (gitignored,
+not in version control; see `.env.example` for the keys) — the same file
+`docker compose` and `triage/run_triage.sh` both read.
 
 Everything that identifies the target — the harness, the seed directory, the
 archive sub-directory — lives in this layer. The rest of the system only
@@ -99,7 +102,7 @@ been run over the AFL++ crash directory.
 
 `triage/run_triage.sh` is the cron entry point that ties the two scripts
 together: it selects the active target (newest `targets` row unless
-`TARGET_ID` is set in `/data/fuzzer-pipeline.env`), runs the collector, runs
+`TARGET_ID` is set in the repo-root `.env`), runs the collector, runs
 CASR in the fuzzer image and then the ingestion.
 
 ## 4. Database — `db/`
