@@ -8,7 +8,23 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-app = FastAPI(title="Fuzzer Crash Triage API")
+# Docs expose the full schema (including the operator-only /crashes shape);
+# keep them off in production unless explicitly opted into.
+_docs_enabled = os.environ.get("ENABLE_API_DOCS") == "1"
+
+# Set on the instance Caddy proxies to the public site: every crash-related
+# response is forced to public-only, ignoring whatever the client asks for,
+# and the status-update endpoint is hidden. Unset for the admin/local-dev
+# instance (run bare, against the DB over an SSH tunnel), which keeps today's
+# full behaviour.
+PUBLIC_MODE = os.environ.get("PUBLIC_MODE") == "1"
+
+app = FastAPI(
+    title="Fuzzer Crash Triage API",
+    docs_url="/docs" if _docs_enabled else None,
+    redoc_url="/redoc" if _docs_enabled else None,
+    openapi_url="/openapi.json" if _docs_enabled else None,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -79,13 +95,19 @@ def list_targets(program_id: Optional[int] = None):
     # Each target carries the state of its most recent session, so the
     # frontend can tell which targets are being fuzzed right now without
     # loading every session's readings.
+    #
+    # It also carries aggregate, detail-free crash counts (one unique site
+    # per crash_line, same dedup as GET /crashes) so the frontend never needs
+    # to call /crashes just to show a number.
     query = f"""
         SELECT t.id, t.program_id, t.focus, t.harness_version, t.created_at,
                ls.id AS latest_session_id,
                ls.started_at AS latest_session_started_at,
                ls.ended_at AS latest_session_ended_at,
                ls.latest_reading_at,
-               COALESCE(ls.running, false) AS running
+               COALESCE(ls.running, false) AS running,
+               COALESCE(cc.total_crashes, 0) AS total_crashes,
+               COALESCE(cc.public_crashes, 0) AS public_crashes
         FROM targets t
         LEFT JOIN LATERAL (
             SELECT * FROM ({SESSION_STATE_SQL}) st
@@ -93,6 +115,30 @@ def list_targets(program_id: Optional[int] = None):
             ORDER BY st.started_at DESC NULLS LAST, st.id DESC
             LIMIT 1
         ) ls ON true
+        LEFT JOIN LATERAL (
+            -- Deduped independently per visibility, matching how GET /crashes
+            -- dedups: it filters to visibility = 'public' *before* collapsing
+            -- to one row per crash_line, not after. Deduping once across all
+            -- rows and then checking the winner's visibility would disagree
+            -- with /crashes whenever a site's earliest row is private but a
+            -- later one at the same site is public (e.g. a duplicate marked
+            -- public after an earlier private report).
+            SELECT
+                (SELECT count(*) FROM (
+                    SELECT DISTINCT ON (c.crash_line) c.id
+                    FROM crashes c
+                    JOIN sessions cs ON c.session_id = cs.id
+                    WHERE cs.target_id = t.id
+                    ORDER BY c.crash_line, c.discovered_at ASC
+                ) all_sites) AS total_crashes,
+                (SELECT count(*) FROM (
+                    SELECT DISTINCT ON (c.crash_line) c.id
+                    FROM crashes c
+                    JOIN sessions cs ON c.session_id = cs.id
+                    WHERE cs.target_id = t.id AND c.visibility = 'public'
+                    ORDER BY c.crash_line, c.discovered_at ASC
+                ) public_sites) AS public_crashes
+        ) cc ON true
         WHERE 1=1
     """
     params = []
@@ -193,7 +239,9 @@ def list_crashes(
 
     # visibility=private is the admin view and returns every row, mirroring
     # how /crashes/{id} treats it; anything else is limited to public rows.
-    if visibility != "private":
+    # In public mode that admin view does not exist: whatever the client
+    # asks for, only public rows are ever returned.
+    if PUBLIC_MODE or visibility != "private":
         query += " AND c.visibility = 'public'"
 
     if status:
@@ -240,7 +288,13 @@ def get_crash(crash_id: int, visibility: Optional[str] = None):
     if not row:
         raise HTTPException(status_code=404, detail="Crash not found")
 
-    if visibility != "private" and row["visibility"] != "public":
+    is_public = row["visibility"] == "public"
+    if PUBLIC_MODE:
+        # Same status and body as a missing ID: a 403 here would confirm the
+        # ID exists but is private, which is itself a disclosure.
+        if not is_public:
+            raise HTTPException(status_code=404, detail="Crash not found")
+    elif visibility != "private" and not is_public:
         raise HTTPException(status_code=403, detail="This crash has not been disclosed yet")
 
     return row
@@ -248,6 +302,9 @@ def get_crash(crash_id: int, visibility: Optional[str] = None):
 
 @app.patch("/crashes/{crash_id}/status")
 def update_crash_status(crash_id: int, body: CrashStatusUpdate):
+    if PUBLIC_MODE:
+        raise HTTPException(status_code=404, detail="Not found")
+
     conn = get_connection()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute(
@@ -279,6 +336,8 @@ def download_poc(crash_id: int):
         raise HTTPException(status_code=404, detail="Crash not found")
 
     if row["visibility"] != "public":
+        if PUBLIC_MODE:
+            raise HTTPException(status_code=404, detail="Crash not found")
         raise HTTPException(status_code=403, detail="This crash has not been disclosed yet")
 
     file_path = row["poc_file_path"]

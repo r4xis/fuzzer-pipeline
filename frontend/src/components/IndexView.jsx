@@ -4,7 +4,7 @@ import { fmtDate } from "../format";
 function countsLabel(c) {
   if (c === undefined) return "…";
   if (c === null) return "—";
-  return `${c.total} finding${c.total === 1 ? "" : "s"} · ${c.reported} reported`;
+  return `${c.total} finding${c.total === 1 ? "" : "s"} · ${c.public} public`;
 }
 
 export default function IndexView({ tree, treeError, counts, onRetry, onSelectTarget }) {

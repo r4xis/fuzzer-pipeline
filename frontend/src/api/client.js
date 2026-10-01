@@ -2,7 +2,11 @@ export const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000"
 
 async function getJson(path) {
   const res = await fetch(`${API_BASE}${path}`);
-  if (!res.ok) throw new Error(`${res.status} ${path}`);
+  if (!res.ok) {
+    const error = new Error(`${res.status} ${path}`);
+    error.status = res.status;
+    throw error;
+  }
   return res.json();
 }
 
@@ -30,14 +34,14 @@ export async function fetchProgramTree() {
 }
 
 export async function fetchCrashes(targetId, { status } = {}) {
-  const params = new URLSearchParams({ visibility: "private", target_id: targetId });
+  const params = new URLSearchParams({ target_id: targetId });
   if (status) params.set("status", status);
   const data = await getJson(`/crashes?${params}`);
   return data.crashes;
 }
 
 export async function fetchCrashDetail(id) {
-  return getJson(`/crashes/${id}?visibility=private`);
+  return getJson(`/crashes/${id}`);
 }
 
 export async function fetchSession(sessionId) {

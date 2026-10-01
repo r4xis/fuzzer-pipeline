@@ -39,3 +39,39 @@ jobs:
             docker compose up -d --no-deps api
 
             sleep 3 && curl -fsS 127.0.0.1:8000/programs > /dev/null
+
+            deploy/build_frontend.sh
+
+            sudo caddy validate --config deploy/Caddyfile --adapter caddyfile
+            sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
+            sudo systemctl reload caddy
+
+            curl -fsS --resolve r4xis.dev:443:127.0.0.1 https://r4xis.dev/ -o /dev/null
+            curl -fsS --resolve r4xis.dev:443:127.0.0.1 https://r4xis.dev/api/programs -o /dev/null
+            curl -fsS --resolve r4xis.dev:443:127.0.0.1 https://r4xis.dev/api/crashes -o /dev/null
+
+            patch_status=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH \
+              --resolve r4xis.dev:443:127.0.0.1 https://r4xis.dev/api/crashes/1/status \
+              -H 'Content-Type: application/json' -d '{"status":"reported"}')
+            if [ "$patch_status" -ge 200 ] && [ "$patch_status" -lt 300 ]; then
+              echo "PATCH /api/crashes/1/status should not succeed in public mode, got $patch_status" >&2
+              exit 1
+            fi
+
+            # Defence in depth, checked directly against the API (bypassing
+            # Caddy): even if a client asks for the admin view, PUBLIC_MODE
+            # must still only ever return public findings. Compared per
+            # target, not summed: /crashes dedups crash_line globally, so a
+            # site shared by two targets could make a summed comparison pass
+            # even if one target's count were wrong.
+            target_rows=$(curl -fsS 127.0.0.1:8000/targets \
+              | python3 -c "import json,sys; d=json.load(sys.stdin); print('\n'.join(f\"{t['id']} {t['public_crashes']}\" for t in d['targets']))")
+            while read -r tid expected; do
+              [ -z "$tid" ] && continue
+              actual=$(curl -fsS "127.0.0.1:8000/crashes?target_id=${tid}&visibility=private" \
+                | python3 -c "import json,sys; print(json.load(sys.stdin)['count'])")
+              if [ "$actual" != "$expected" ]; then
+                echo "PUBLIC_MODE leak: target $tid -> /crashes count=$actual, /targets.public_crashes=$expected" >&2
+                exit 1
+              fi
+            done <<< "$target_rows"

@@ -60,10 +60,15 @@ export default function CrashDetail({ id, onBack, backLabel }) {
   }, [id]);
 
   if (error) {
+    const undisclosed = error.status === 403 || error.status === 404;
     return (
       <div>
         <button className="btn-link" onClick={onBack}>← {backLabel}</button>
-        <div className="error">failed to load finding #{id}: {String(error.message || error)}</div>
+        {undisclosed ? (
+          <div className="empty-row">No disclosed findings yet.</div>
+        ) : (
+          <div className="error">failed to load finding #{id}: {String(error.message || error)}</div>
+        )}
       </div>
     );
   }
@@ -174,7 +179,7 @@ export default function CrashDetail({ id, onBack, backLabel }) {
           <div className="section">
             <div className="section-label">Proof of concept</div>
             {downloadable ? (
-              <a className="btn-download" href={downloadUrl(crash.id)}>
+              <a className="btn-download" href={downloadUrl(crash.id)} download>
                 <DownloadIcon />
                 Download PoC input
               </a>

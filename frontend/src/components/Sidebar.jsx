@@ -1,9 +1,9 @@
 import ApiUnreachable from "./ApiUnreachable";
 
-// "<found> · <reported> rep.", always both, so a fresh target reads "0 · 0 rep."
+// "<found> · <public> pub.", always both, so a fresh target reads "0 · 0 pub."
 function countLabel(c) {
   if (!c) return "";
-  return `${c.total} · ${c.reported} rep.`;
+  return `${c.total} · ${c.public} pub.`;
 }
 
 export default function Sidebar({ tree, treeError, counts, fleetById, onRetry, selection, onSelectProgram, onSelectTarget, open, onClose }) {
@@ -37,7 +37,7 @@ export default function Sidebar({ tree, treeError, counts, fleetById, onRetry, s
                     onClick={() => onSelectTarget(program.id, t.id)}
                     title={[
                       running ? "actively fuzzing" : "not running",
-                      counts[t.id] ? `${counts[t.id].total} findings, ${counts[t.id].reported} reported` : null,
+                      counts[t.id] ? `${counts[t.id].total} findings, ${counts[t.id].public} public` : null,
                     ]
                       .filter(Boolean)
                       .join(" · ")}

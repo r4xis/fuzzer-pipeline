@@ -51,9 +51,7 @@ export default function CrashList({ targetId, refreshKey, onSelect }) {
 
       {error && <div className="error">failed to load findings: {String(error.message || error)}</div>}
       {!crashes && !error && <div className="loading" style={{ padding: "14px 4px" }}>loading…</div>}
-      {crashes && crashes.length === 0 && (
-        <div className="empty-row">{tab === "reported" ? "nothing reported yet" : "no findings recorded"}</div>
-      )}
+      {crashes && crashes.length === 0 && <div className="empty-row">No disclosed findings yet.</div>}
       {crashes &&
         crashes.map((c) => (
           <button key={c.id} className="row-btn crash-row" onClick={() => onSelect(c.id)}>

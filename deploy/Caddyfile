@@ -1,0 +1,29 @@
+r4xis.dev {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		-Server
+	}
+
+	# The API itself only ever serves public data here (PUBLIC_MODE=1); this
+	# is read-only on top of that.
+	handle_path /api/* {
+		@notget {
+			not method GET HEAD
+		}
+		respond @notget 405
+
+		reverse_proxy 127.0.0.1:8000
+	}
+
+	handle {
+		root * /srv/fuzzer-ui
+		try_files {path} /index.html
+		file_server
+	}
+}

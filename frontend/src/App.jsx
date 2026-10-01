@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchCrashes, fetchProgramTree } from "./api/client";
+import { fetchAllTargets, fetchProgramTree } from "./api/client";
 import { useCrashWatch, useFleetLive, useSessionData } from "./hooks";
 import Header from "./components/Header";
 import Sidebar from "./components/Sidebar";
@@ -12,15 +12,13 @@ import "./index.css";
 
 const TREE_RETRY_MS = 8000;
 
-async function fetchTargetCounts(targets) {
-  const entries = await Promise.all(
-    targets.map((t) =>
-      fetchCrashes(t.id)
-        .then((list) => [t.id, { total: list.length, reported: list.filter((c) => c.status === "reported").length }])
-        .catch(() => [t.id, null]),
-    ),
+// One call for every target's counts — /targets already carries them,
+// so the index and sidebar never need to hit /crashes just for a number.
+async function fetchTargetCounts() {
+  const targets = await fetchAllTargets();
+  return Object.fromEntries(
+    targets.map((t) => [t.id, { total: t.total_crashes, public: t.public_crashes }]),
   );
-  return Object.fromEntries(entries);
 }
 
 export default function App() {
@@ -74,7 +72,7 @@ export default function App() {
   useEffect(() => {
     if (!tree) return undefined;
     let alive = true;
-    fetchTargetCounts(tree.flatMap((e) => e.targets)).then((c) => alive && setCounts(c));
+    fetchTargetCounts().then((c) => alive && setCounts(c));
     return () => {
       alive = false;
     };

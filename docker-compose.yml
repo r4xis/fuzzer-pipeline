@@ -81,6 +81,10 @@ services:
     environment:
       DB_HOST: postgres
       FUZZER_DB_PASSWORD: ${FUZZER_DB_PASSWORD}
+      # This is the instance Caddy proxies to the public site: it must never
+      # serve private findings. Admin access runs a bare uvicorn locally
+      # against the DB over an SSH tunnel instead, where this stays unset.
+      PUBLIC_MODE: "1"
     volumes:
       - /data:/data
     depends_on:
