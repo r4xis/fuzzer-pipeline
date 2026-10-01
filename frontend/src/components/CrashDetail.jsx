@@ -60,11 +60,12 @@ export default function CrashDetail({ id, onBack, backLabel }) {
   }, [id]);
 
   if (error) {
-    const undisclosed = error.status === 403 || error.status === 404;
     return (
       <div>
         <button className="btn-link" onClick={onBack}>← {backLabel}</button>
-        {undisclosed ? (
+        {error.status === 404 ? (
+          <div className="empty-row">Finding not found.</div>
+        ) : error.status === 403 ? (
           <div className="empty-row">No disclosed findings yet.</div>
         ) : (
           <div className="error">failed to load finding #{id}: {String(error.message || error)}</div>
@@ -81,7 +82,9 @@ export default function CrashDetail({ id, onBack, backLabel }) {
     );
   }
 
-  const disclosed = crash.status === "reported" || crash.status === "duplicate";
+  // Driven by the API's redaction flag, not status: a withheld row carries
+  // only id/status/discovered_at/target/session ids, whatever its status.
+  const disclosed = !crash.withheld;
   const downloadable = disclosed && crash.visibility === "public";
   const sev = severityLevel(crash.severity_type);
 
@@ -91,15 +94,23 @@ export default function CrashDetail({ id, onBack, backLabel }) {
 
       <div className="view-header">
         <p className="eyebrow">
-          {crash.program_name}
-          <span className="sep">/</span>
-          {crash.target_focus}
-          <span className="sep">·</span>
+          {crash.program_name && (
+            <>
+              {crash.program_name}
+              <span className="sep">/</span>
+            </>
+          )}
+          {crash.target_focus && (
+            <>
+              {crash.target_focus}
+              <span className="sep">·</span>
+            </>
+          )}
           finding #{crash.id}
         </p>
-        <h1 className="view-title mono">{crash.crash_line}</h1>
+        <h1 className="view-title mono">{crash.withheld ? "Undisclosed finding" : crash.crash_line}</h1>
         <div className="detail-badges">
-          <span className={`sev-badge sev-${sev}`}>{crash.severity_type || "unclassified"}</span>
+          <span className={`sev-badge${crash.withheld ? "" : ` sev-${sev}`}`}>{crash.withheld ? "withheld" : crash.severity_type || "unclassified"}</span>
           {crash.severity_desc && <span className="sev-badge">{crash.severity_desc}</span>}
           <span className={`status-pill status-${crash.status}`}>{crash.status}</span>
         </div>
@@ -110,8 +121,12 @@ export default function CrashDetail({ id, onBack, backLabel }) {
         <dd>{fmtDateTime(crash.discovered_at)}</dd>
         <dt>Status</dt>
         <dd>{crash.status}</dd>
-        <dt>Visibility</dt>
-        <dd>{crash.visibility}</dd>
+        {crash.visibility && (
+          <>
+            <dt>Visibility</dt>
+            <dd>{crash.visibility}</dd>
+          </>
+        )}
         {crash.report_url && (
           <>
             <dt>Reported at</dt>

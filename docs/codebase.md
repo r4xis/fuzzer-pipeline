@@ -148,14 +148,15 @@ serialise directly to JSON. CORS allows `GET` from the Vite dev origins only.
 | `GET /programs` | all programs, by name |
 | `GET /targets?program_id=` | targets with `created_at` and the state of each target's newest session: `latest_session_id` (how the frontend reaches the session-keyed endpoints), `latest_session_started_at`, `latest_session_ended_at`, `latest_reading_at` and `running` — true while `ended_at` is unset and the newest `coverage_history` reading is younger than `RUNNING_WINDOW` (20 minutes) |
 | `GET /sessions/{id}` | the session row plus the same `latest_reading_at` / `running` fields |
-| `GET /crashes` | `DISTINCT ON (crash_line)` keeping the earliest finding per site, then ordered newest-first; `visibility=private` returns every site (admin view), otherwise only `public`; optional `status` and `target_id` filters (the latter joins through `sessions` → `targets`) |
-| `GET /crashes/{id}` | full row; `visibility=private` unlocks non-public rows, otherwise 403 |
-| `GET /crashes/{id}/download` | `FileResponse` of `poc_file_path` for `public` rows; 403 if not public, 410 if the file is missing |
+| `GET /crashes` | `DISTINCT ON (crash_line)` keeping the earliest finding per site, then ordered newest-first; optional `status` and `target_id` filters (the latter joins through `sessions` → `targets`). In `PUBLIC_MODE` every site is listed regardless of visibility (the `visibility` query param is ignored) but a non-public row is redacted — see "Disclosure gating" below. Outside `PUBLIC_MODE`, `visibility=private` returns every site unredacted (admin view), otherwise only `public` ones |
+| `GET /crashes/{id}` | full row, unless `PUBLIC_MODE`: a non-public finding then returns 200 with the same redacted shape as the list (not 404 — existence is already visible there) and `visibility=private` is ignored. Outside `PUBLIC_MODE`, `visibility=private` unlocks non-public rows, otherwise 403 |
+| `GET /crashes/{id}/download` | `FileResponse` of `poc_file_path` for `public` rows; if not public, 404 in `PUBLIC_MODE` (same reasoning as above) or 403 otherwise; 410 if the file is missing |
 | `GET /sessions/{id}/history` | `coverage_history` rows, oldest first (404 for an unknown session) |
 | `GET /sessions/{id}/instances` | `fuzzer_instances` rows, oldest first |
-| `PATCH /crashes/{id}/status` | operator-only status change (`new`/`triaged`/`reported`/`duplicate`); not reachable from the site |
+| `PATCH /crashes/{id}/status` | operator-only status change (`new`/`triaged`/`reported`/`duplicate`); not reachable from the site; disabled (404) in `PUBLIC_MODE` |
 
-Configuration: `DB_HOST` (default `postgres`), `DB_PORT`, `FUZZER_DB_PASSWORD`.
+Configuration: `DB_HOST` (default `postgres`), `DB_PORT`, `FUZZER_DB_PASSWORD`,
+`PUBLIC_MODE` (see below).
 
 ## 6. Frontend — `frontend/`
 
@@ -201,8 +202,8 @@ a single `selection` object in `App.jsx`.
 | `SignalTrace` | compact SVG strip: the selected instance's `crashes_saved` history as a dashed line (master by default, chips to switch), a transient spike drawn on `spikeKey`, flat when closed; geometry is written to the DOM from a `requestAnimationFrame` loop, not through React state |
 | `CoverageChart` | static SVG line chart, one line per instance from `/instances` (falls back to session history), y-axis scaled to the visible data's own range with padding and nice ticks, legend toggles instances |
 | `InstanceTable` | latest reading per instance; `fuzzer0` marked as master |
-| `CrashList` | All / Reported tabs (the latter uses `?status=reported`), one row per finding with severity dot, status pill and date |
-| `CrashDetail` | badges and key facts for every finding; stack trace, source context (crash line highlighted), sanitizer summary and PoC download only when `status` is `reported` or `duplicate`; download only when also `public`; shows `report_url` |
+| `CrashList` | All / Reported tabs (the latter uses `?status=reported`), one row per finding with severity dot, status pill and date; a `withheld` row shows a neutral dot and "detail withheld" in place of the real `crash_line` |
+| `CrashDetail` | badges and key facts for every finding; stack trace, source context (crash line highlighted), sanitizer summary and PoC download only when the API's `withheld` flag is false; download only when also `public`; shows `report_url`; a withheld finding shows a "withheld" severity badge instead of a real one |
 | `ApiUnreachable` | notice with retry, shown in place of the index and in the sidebar while the API cannot be reached |
 
 `format.js` holds number/date helpers; `index.css` holds the design tokens
@@ -212,13 +213,55 @@ ever set in callbacks and effects never call `setState` synchronously.
 
 ### Disclosure gating
 
-The backend decides what exists (`visibility`) and the frontend decides
-what to render (`status`): a finding that is still `new` or `triaged` shows
-only its location, severity and assessment behind a "technical detail
-withheld" panel, whatever its visibility. `reported` and `duplicate` both
-disclose the full technical detail (PoC download still requires
-`visibility = public` on top of that). The site has no controls that change
-data.
+Redaction happens server-side, in `PUBLIC_MODE` (`api/main.py`:
+`PUBLIC_MODE = os.environ.get("PUBLIC_MODE") == "1"`), not in the frontend.
+That env var is set on the instance Caddy proxies to the public site
+(`docker-compose.yml`'s `api` service) and left unset on the admin/local-dev
+instance (run bare against the DB over an SSH tunnel — see "Admin access"
+below), which keeps the pre-`PUBLIC_MODE` behaviour unchanged: full rows
+always, `visibility` query param controls the admin view.
+
+In `PUBLIC_MODE`, every finding is listed and individually fetchable —
+existence is never hidden — but `redact_crash()` cuts a row with
+`visibility != 'public'` down to an explicit allowlist: `id`, `status`,
+`discovered_at`, `target_id`, `session_id` and `withheld: true`. Nothing
+else — `crash_line`, severity, stack trace, source context, sanitizer
+output, PoC fields — is ever included for that shape; the allowlist is
+built by picking keys *in*, not by deleting sensitive ones out, so a column
+added to the query later can't leak by default. A public row gets the same
+base fields plus the full public set (list vs. detail allow different
+amounts) and `withheld: false`.
+
+The frontend renders off that flag alone: `CrashDetail`'s
+`disclosed = !crash.withheld`, `CrashList` shows a "detail withheld" row
+with a neutral (uncoloured) severity dot instead of the real `crash_line`.
+`status` is a separate workflow field and no longer gates disclosure — a
+`public` finding discloses regardless of `status`. The site has no controls
+that change data.
+
+### Admin access
+
+The only supported way to see a private finding in full is to run the API
+yourself against the production DB, over an SSH tunnel — never on the
+production host, and never through the `PUBLIC_MODE` instance:
+
+```
+ssh -N -L 15432:127.0.0.1:5432 opc@<host>
+```
+
+Then, in another terminal, run the API locally **without** `--reload` (a
+reloading process against a live tunnel is one you can forget is still
+running) on a **non-default port**, so it can never collide with a local
+dev or test instance:
+
+```
+DB_HOST=localhost DB_PORT=15432 FUZZER_DB_PASSWORD=<prod password> \
+  uvicorn main:app --port 8001
+```
+
+Point the dev frontend (`frontend/`, `npm run dev`) at it with
+`VITE_API_BASE=http://localhost:8001`. Close both the API process and the
+SSH tunnel when done — neither is meant to be left running.
 
 ## 7. Deployment — `.github/workflows/deploy.yml`
 

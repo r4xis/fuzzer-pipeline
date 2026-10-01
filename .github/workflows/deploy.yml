@@ -59,19 +59,48 @@ jobs:
             fi
 
             # Defence in depth, checked directly against the API (bypassing
-            # Caddy): even if a client asks for the admin view, PUBLIC_MODE
-            # must still only ever return public findings. Compared per
-            # target, not summed: /crashes dedups crash_line globally, so a
-            # site shared by two targets could make a summed comparison pass
-            # even if one target's count were wrong.
-            target_rows=$(curl -fsS 127.0.0.1:8000/targets \
-              | python3 -c "import json,sys; d=json.load(sys.stdin); print('\n'.join(f\"{t['id']} {t['public_crashes']}\" for t in d['targets']))")
-            while read -r tid expected; do
-              [ -z "$tid" ] && continue
-              actual=$(curl -fsS "127.0.0.1:8000/crashes?target_id=${tid}&visibility=private" \
-                | python3 -c "import json,sys; print(json.load(sys.stdin)['count'])")
-              if [ "$actual" != "$expected" ]; then
-                echo "PUBLIC_MODE leak: target $tid -> /crashes count=$actual, /targets.public_crashes=$expected" >&2
-                exit 1
-              fi
-            done <<< "$target_rows"
+            # Caddy). PUBLIC_MODE now lists every finding (redacted, not
+            # hidden), so for each target: (1) admin's visibility=private
+            # override must be a no-op -- /crashes?target_id=<id> must return
+            # exactly that target's total_crashes rows. Queried per target,
+            # not from one global /crashes call grouped by target_id: /crashes
+            # dedups crash_line globally, so a site shared by two targets is
+            # attributed to only one of them there, but counted in both
+            # targets' total_crashes -- grouping the global list would
+            # under-count one target and fail the check for no real leak.
+            # (2) no row marked withheld, in the list or in its own
+            # /crashes/{id}, may carry a key outside the allowlist.
+            python3 <<'PYEOF'
+            import json
+            import sys
+            import urllib.request
+
+            def get(path):
+                with urllib.request.urlopen(f"http://127.0.0.1:8000{path}") as r:
+                    return json.load(r)
+
+            allowed = {"id", "status", "discovered_at", "target_id", "session_id", "withheld"}
+            errors = []
+
+            for t in get("/targets")["targets"]:
+                tid = t["id"]
+                expected = t["total_crashes"]
+                crashes = get(f"/crashes?target_id={tid}&visibility=private")["crashes"]
+                if len(crashes) != expected:
+                    errors.append(f"target {tid}: /crashes count={len(crashes)}, /targets.total_crashes={expected}")
+
+                for c in crashes:
+                    if c.get("withheld") is not True:
+                        continue
+                    leaked = set(c.keys()) - allowed
+                    if leaked:
+                        errors.append(f"crash {c['id']}: list row leaks keys {sorted(leaked)}")
+                    detail = get(f"/crashes/{c['id']}")
+                    leaked_detail = set(detail.keys()) - allowed
+                    if leaked_detail:
+                        errors.append(f"crash {c['id']}: detail row leaks keys {sorted(leaked_detail)}")
+
+            if errors:
+                print("\n".join(errors), file=sys.stderr)
+                sys.exit(1)
+            PYEOF

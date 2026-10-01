@@ -51,12 +51,16 @@ export default function CrashList({ targetId, refreshKey, onSelect }) {
 
       {error && <div className="error">failed to load findings: {String(error.message || error)}</div>}
       {!crashes && !error && <div className="loading" style={{ padding: "14px 4px" }}>loading…</div>}
-      {crashes && crashes.length === 0 && <div className="empty-row">No disclosed findings yet.</div>}
+      {crashes && crashes.length === 0 && (
+        <div className="empty-row">{tab === "reported" ? "nothing reported yet" : "no findings recorded"}</div>
+      )}
       {crashes &&
         crashes.map((c) => (
           <button key={c.id} className="row-btn crash-row" onClick={() => onSelect(c.id)}>
-            <span className={`sev-dot sev-${severityLevel(c.severity_type)}`} title={c.severity_type} />
-            <span className="crash-line" title={c.crash_line}>{c.crash_line}</span>
+            <span className={`sev-dot${c.withheld ? "" : ` sev-${severityLevel(c.severity_type)}`}`} title={c.withheld ? undefined : c.severity_type} />
+            <span className="crash-line" title={c.withheld ? undefined : c.crash_line}>
+              {c.withheld ? "Undisclosed finding — detail withheld" : c.crash_line}
+            </span>
             <span className={`status-pill status-${c.status}`}>{c.status}</span>
             <span className="crash-date">{fmtDate(c.discovered_at)}</span>
           </button>

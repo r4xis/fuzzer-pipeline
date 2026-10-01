@@ -19,6 +19,35 @@ _docs_enabled = os.environ.get("ENABLE_API_DOCS") == "1"
 # full behaviour.
 PUBLIC_MODE = os.environ.get("PUBLIC_MODE") == "1"
 
+# Redaction for PUBLIC_MODE: every finding is listed (existence is public
+# either way), but a non-public row is cut down to this allowlist. Built by
+# picking allowed keys *in*, never by deleting sensitive ones out, so a
+# column added to a query later can't leak by default.
+WITHHELD_FIELDS = ["id", "status", "discovered_at", "target_id", "session_id"]
+
+# Extra fields a disclosed (visibility='public') row adds on top of
+# WITHHELD_FIELDS. The list view never carried stack trace / source / PoC
+# fields even pre-redaction, so its extra set is smaller than detail's.
+PUBLIC_LIST_EXTRA_FIELDS = [
+    "crash_line", "severity_type", "severity_desc", "visibility",
+    "report_url", "target_focus", "program_name",
+]
+PUBLIC_DETAIL_EXTRA_FIELDS = PUBLIC_LIST_EXTRA_FIELDS + [
+    "severity_explain", "stacktrace", "asan_summary", "source_context",
+    "poc_file_size", "poc_file_sha256",
+]
+
+
+def redact_crash(row, public_extra_fields):
+    if row["visibility"] == "public":
+        out = {k: row[k] for k in WITHHELD_FIELDS + public_extra_fields}
+        out["withheld"] = False
+        return out
+    out = {k: row[k] for k in WITHHELD_FIELDS}
+    out["withheld"] = True
+    return out
+
+
 app = FastAPI(
     title="Fuzzer Crash Triage API",
     docs_url="/docs" if _docs_enabled else None,
@@ -228,6 +257,7 @@ def list_crashes(
         SELECT DISTINCT ON (c.crash_line)
                c.id, c.crash_line, c.severity_type, c.severity_desc,
                c.visibility, c.status, c.discovered_at, c.report_url,
+               c.session_id, t.id AS target_id,
                t.focus AS target_focus, p.name AS program_name
         FROM crashes c
         LEFT JOIN sessions s ON c.session_id = s.id
@@ -239,9 +269,9 @@ def list_crashes(
 
     # visibility=private is the admin view and returns every row, mirroring
     # how /crashes/{id} treats it; anything else is limited to public rows.
-    # In public mode that admin view does not exist: whatever the client
-    # asks for, only public rows are ever returned.
-    if PUBLIC_MODE or visibility != "private":
+    # In public mode every finding is listed regardless (redacted below),
+    # so that admin override does not apply and is simply ignored.
+    if not PUBLIC_MODE and visibility != "private":
         query += " AND c.visibility = 'public'"
 
     if status:
@@ -261,6 +291,9 @@ def list_crashes(
         rows = cur.fetchall()
     conn.close()
 
+    if PUBLIC_MODE:
+        rows = [redact_crash(row, PUBLIC_LIST_EXTRA_FIELDS) for row in rows]
+
     return {"count": len(rows), "crashes": rows}
 
 
@@ -273,6 +306,7 @@ def get_crash(crash_id: int, visibility: Optional[str] = None):
             SELECT c.id, c.crash_line, c.severity_type, c.severity_desc, c.severity_explain,
                    c.stacktrace, c.asan_summary, c.source_context, c.poc_file_size,
                    c.poc_file_sha256, c.visibility, c.status, c.discovered_at, c.report_url,
+                   c.session_id, t.id AS target_id,
                    t.focus AS target_focus, p.name AS program_name
             FROM crashes c
             LEFT JOIN sessions s ON c.session_id = s.id
@@ -288,13 +322,13 @@ def get_crash(crash_id: int, visibility: Optional[str] = None):
     if not row:
         raise HTTPException(status_code=404, detail="Crash not found")
 
-    is_public = row["visibility"] == "public"
     if PUBLIC_MODE:
-        # Same status and body as a missing ID: a 403 here would confirm the
-        # ID exists but is private, which is itself a disclosure.
-        if not is_public:
-            raise HTTPException(status_code=404, detail="Crash not found")
-    elif visibility != "private" and not is_public:
+        # 200 either way: existence is already visible via the (now
+        # redacted-but-complete) /crashes list, so there is nothing a 404
+        # would hide that a 200 with a withheld body doesn't already show.
+        return redact_crash(row, PUBLIC_DETAIL_EXTRA_FIELDS)
+
+    if visibility != "private" and row["visibility"] != "public":
         raise HTTPException(status_code=403, detail="This crash has not been disclosed yet")
 
     return row
