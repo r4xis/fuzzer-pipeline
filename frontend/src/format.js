@@ -62,3 +62,7 @@ export function severityLevel(type) {
   if (type === "PROBABLY_EXPLOITABLE") return "mid";
   return "low";
 }
+
+export function withheldLabel(crashFile) {
+  return crashFile ? `${crashFile} — details withheld` : "Undisclosed finding";
+}

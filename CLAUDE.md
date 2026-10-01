@@ -42,3 +42,12 @@ Clean up everything you start: kill processes you launched, remove
 containers and temp files, and leave the working tree as you found it
 (revert any change made only to produce a test failure, such as deliberately
 breaking an allowlist to prove a check catches it).
+
+## Browser automation stays on localhost
+
+Browser automation (claude-in-chrome or any other) may only navigate to
+`localhost` / `127.0.0.1` URLs that you started yourself — never to an
+external site, and never to GitHub, Cloudflare, Oracle Cloud, or any other
+console. The browser carries the operator's own logged-in sessions, so
+navigating it elsewhere acts as them. If a task needs anything outside
+localhost, stop and say so instead of finding a way to do it yourself.

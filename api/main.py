@@ -20,7 +20,8 @@ _docs_enabled = os.environ.get("ENABLE_API_DOCS") == "1"
 PUBLIC_MODE = os.environ.get("PUBLIC_MODE") == "1"
 
 # Redaction for PUBLIC_MODE: every finding is listed (existence is public
-# either way), but a non-public row is cut down to this allowlist. Built by
+# either way), but a non-public row is cut down to this allowlist (plus the
+# derived crash_file computed below -- never the real crash_line). Built by
 # picking allowed keys *in*, never by deleting sensitive ones out, so a
 # column added to a query later can't leak by default.
 WITHHELD_FIELDS = ["id", "status", "discovered_at", "target_id", "session_id"]
@@ -38,6 +39,24 @@ PUBLIC_DETAIL_EXTRA_FIELDS = PUBLIC_LIST_EXTRA_FIELDS + [
 ]
 
 
+# Basename of the path in a "path:line[:col]" crash_line, or None if it's
+# missing or doesn't parse as that shape. Never exposes the line/col or any
+# directory component.
+def crash_file_from_line(crash_line):
+    if not crash_line:
+        return None
+    parts = crash_line.rsplit(":", 2)
+    if len(parts) == 3 and parts[1].isdigit() and parts[2].isdigit() and parts[0]:
+        path = parts[0]
+    else:
+        parts = crash_line.rsplit(":", 1)
+        if len(parts) == 2 and parts[1].isdigit() and parts[0]:
+            path = parts[0]
+        else:
+            return None
+    return os.path.basename(path)
+
+
 def redact_crash(row, public_extra_fields):
     if row["visibility"] == "public":
         out = {k: row[k] for k in WITHHELD_FIELDS + public_extra_fields}
@@ -45,6 +64,7 @@ def redact_crash(row, public_extra_fields):
         return out
     out = {k: row[k] for k in WITHHELD_FIELDS}
     out["withheld"] = True
+    out["crash_file"] = crash_file_from_line(row["crash_line"])
     return out
 
 

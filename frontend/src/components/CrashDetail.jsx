@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { downloadUrl, fetchCrashDetail } from "../api/client";
-import { fmtCompact, fmtDateTime, severityLevel } from "../format";
+import { fmtCompact, fmtDateTime, severityLevel, withheldLabel } from "../format";
 
 function LockIcon() {
   return (
@@ -108,7 +108,7 @@ export default function CrashDetail({ id, onBack, backLabel }) {
           )}
           finding #{crash.id}
         </p>
-        <h1 className="view-title mono">{crash.withheld ? "Undisclosed finding" : crash.crash_line}</h1>
+        <h1 className="view-title mono">{crash.withheld ? withheldLabel(crash.crash_file) : crash.crash_line}</h1>
         <div className="detail-badges">
           <span className={`sev-badge${crash.withheld ? "" : ` sev-${sev}`}`}>{crash.withheld ? "withheld" : crash.severity_type || "unclassified"}</span>
           {crash.severity_desc && <span className="sev-badge">{crash.severity_desc}</span>}

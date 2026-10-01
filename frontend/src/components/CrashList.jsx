@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchCrashes } from "../api/client";
-import { fmtDate, severityLevel } from "../format";
+import { fmtDate, severityLevel, withheldLabel } from "../format";
 
 const TABS = [
   { key: "all", label: "All findings", status: undefined },
@@ -59,7 +59,7 @@ export default function CrashList({ targetId, refreshKey, onSelect }) {
           <button key={c.id} className="row-btn crash-row" onClick={() => onSelect(c.id)}>
             <span className={`sev-dot${c.withheld ? "" : ` sev-${severityLevel(c.severity_type)}`}`} title={c.withheld ? undefined : c.severity_type} />
             <span className="crash-line" title={c.withheld ? undefined : c.crash_line}>
-              {c.withheld ? "Undisclosed finding — detail withheld" : c.crash_line}
+              {c.withheld ? withheldLabel(c.crash_file) : c.crash_line}
             </span>
             <span className={`status-pill status-${c.status}`}>{c.status}</span>
             <span className="crash-date">{fmtDate(c.discovered_at)}</span>

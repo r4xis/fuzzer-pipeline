@@ -69,9 +69,14 @@ jobs:
             # targets' total_crashes -- grouping the global list would
             # under-count one target and fail the check for no real leak.
             # (2) no row marked withheld, in the list or in its own
-            # /crashes/{id}, may carry a key outside the allowlist.
+            # /crashes/{id}, may carry a key outside the allowlist. (3) the
+            # derived crash_file, where present, must be a bare file name --
+            # no directory part ("/"), no line/col suffix (":"), and not
+            # just digits (which would mean a line/col number leaked in as
+            # if it were the file name).
             python3 <<'PYEOF'
             import json
+            import re
             import sys
             import urllib.request
 
@@ -79,8 +84,16 @@ jobs:
                 with urllib.request.urlopen(f"http://127.0.0.1:8000{path}") as r:
                     return json.load(r)
 
-            allowed = {"id", "status", "discovered_at", "target_id", "session_id", "withheld"}
+            allowed = {"id", "status", "discovered_at", "target_id", "session_id", "withheld", "crash_file"}
+            bare_file_re = re.compile(r"^[^/:]+$")
             errors = []
+
+            def check_crash_file(c, where):
+                cf = c.get("crash_file")
+                if cf is None:
+                    return
+                if not bare_file_re.match(cf) or cf.isdigit():
+                    errors.append(f"crash {c['id']}: {where} crash_file {cf!r} leaks path/line info")
 
             for t in get("/targets")["targets"]:
                 tid = t["id"]
@@ -95,10 +108,12 @@ jobs:
                     leaked = set(c.keys()) - allowed
                     if leaked:
                         errors.append(f"crash {c['id']}: list row leaks keys {sorted(leaked)}")
+                    check_crash_file(c, "list")
                     detail = get(f"/crashes/{c['id']}")
                     leaked_detail = set(detail.keys()) - allowed
                     if leaked_detail:
                         errors.append(f"crash {c['id']}: detail row leaks keys {sorted(leaked_detail)}")
+                    check_crash_file(detail, "detail")
 
             if errors:
                 print("\n".join(errors), file=sys.stderr)

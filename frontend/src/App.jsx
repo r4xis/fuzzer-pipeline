@@ -152,7 +152,7 @@ export default function App() {
       <main className="main">
         <div className="main-inner">{view}</div>
       </main>
-      <Footer programs={tree ? tree.map((e) => e.program) : []} />
+      <Footer program={program} />
     </div>
   );
 }

@@ -14,10 +14,12 @@ frontend (CORS allows `GET` only) and exists for operator tooling.
 | GET | `/sessions/{id}` | the session row with `latest_reading_at` and `running` |
 | GET | `/crashes?visibility=&status=&target_id=` | one row per crash site (the earliest finding at each `crash_line`); default: public rows only; `visibility=private` is the admin view and returns every site |
 | GET | `/crashes/{id}?visibility=` | full detail; unreported/private rows need `visibility=private` |
-| GET | `/crashes/{id}/download` | PoC input, `public` rows only (403 otherwise, 410 if the file is missing) |
+| GET | `/crashes/{id}/download` | PoC input, `public` rows only (404 otherwise in `PUBLIC_MODE`, 403 otherwise outside it; 410 if the file is missing) |
 | GET | `/sessions/{id}/history` | session coverage / exec readings, oldest first |
 | GET | `/sessions/{id}/instances` | per-instance readings (`fuzzer0` master, `fuzzerN` secondaries), oldest first |
 | PATCH | `/crashes/{id}/status` | body `{"status": "new" \| "triaged" \| "reported" \| "duplicate"}` |
+
+In `PUBLIC_MODE`, a non-public row is redacted to `{id, status, discovered_at, target_id, session_id, withheld: true, crash_file}` instead of 403/404. `crash_file` is the basename of `crash_line`'s path part (e.g. `dblk_compr.c`), or `null` if `crash_line` is unset or doesn't parse as `path:line[:col]`; it never carries the line/column or any directory.
 
 ## Configuration
 
