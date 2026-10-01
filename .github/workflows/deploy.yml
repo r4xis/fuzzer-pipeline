@@ -10,20 +10,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: SSH and deploy
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262 # v1.0.3
         with:
           host: 79.72.66.118
           username: opc
           key: ${{ secrets.ORACLE_SSH_KEY }}
+          fingerprint: ${{ secrets.ORACLE_HOST_FINGERPRINT }}
           script: |
+            set -euo pipefail
+
             if [ -d ~/fuzzer-pipeline ]; then
-              cd ~/fuzzer-pipeline && git pull origin main
+              cd ~/fuzzer-pipeline
+              git fetch origin
+              if [ -n "$(git status --porcelain)" ]; then
+                echo "fuzzer-pipeline checkout is dirty, refusing to deploy" >&2
+                exit 1
+              fi
+              git checkout main
+              git merge --ff-only origin/main
             else
               git clone https://github.com/r4xis/fuzzer-pipeline.git ~/fuzzer-pipeline
               cd ~/fuzzer-pipeline
             fi
-            cd ~/fuzzer-pipeline
-            docker compose build
-            # Only the API is recreated: restarting the fuzzer services would
-            # kill the running AFL++ campaign.
-            docker compose up -d api
+
+            # Only the API is built and recreated: restarting the fuzzer
+            # services or postgres would kill the running AFL++ campaign.
+            docker compose build api
+            docker compose up -d --no-deps api
+
+            sleep 3 && curl -fsS 127.0.0.1:8000/programs > /dev/null
