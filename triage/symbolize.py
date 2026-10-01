@@ -154,6 +154,12 @@ def _norm_offset(hex_digits: str) -> str:
     return f"0x{hex_digits.lower()}"
 
 
+# A frame CASR already symbolized on its own carries its location as plain
+# text at the end of the line, e.g.:
+#   #3 0xaaaaaadba97c in device_stop_k054539 /src/libvgm/emu/cores/k054539.c:657:2
+_SYMBOLIZED_SRC_SUFFIX_RE = re.compile(r"(/src/\S+)\s*$")
+
+
 def _first_src_frame_location(
     stacktrace: List[str],
     frame_matches: List[Optional[re.Match]],
@@ -162,15 +168,23 @@ def _first_src_frame_location(
 ) -> Optional[Tuple[str, int, int]]:
     """CASR itself skips sanitizer-runtime frames (no /src/ debug info) when
     picking a crash site. Walking the stack in order -- same order as the
-    Stacktrace array, innermost first -- and taking the first frame that
-    resolves under /src/ reproduces that when the crash address's own frame
-    resolves to "??"."""
+    Stacktrace array, innermost first -- and taking the first frame with a
+    /src/ location reproduces that when the crash address's own frame
+    resolves to "??": either a frame CASR already symbolized on its own (its
+    text already ends with a "/src/...:line[:col]" location -- ASan's own
+    inline symbolizer can resolve some frames and not others in the same
+    report), or a raw module+offset frame (matching BuildId) this batch
+    resolved under /src/."""
     for frame, match in zip(stacktrace, frame_matches):
-        if not match or match.group("buildid").lower() != build_id:
-            continue
-        loc = resolved.get(_norm_offset(match.group("offset")))
-        if loc and loc[0].startswith("/src/"):
-            return loc
+        already = _SYMBOLIZED_SRC_SUFFIX_RE.search(frame)
+        if already:
+            loc = _parse_location(already.group(1))
+            if loc:
+                return loc
+        elif match and match.group("buildid").lower() == build_id:
+            loc = resolved.get(_norm_offset(match.group("offset")))
+            if loc and loc[0].startswith("/src/"):
+                return loc
     return None
 
 

@@ -43,6 +43,24 @@ RAW_FRAME_RUNTIME = (
 )
 SYMBOLIZED_FRAME = "    #2 0x55d4a1b2c500 in main /src/libvgm/main.c:10:1"
 
+# A real crash: the top three frames are deep in the ASan runtime/allocator
+# and libc, raw and unresolvable (no debug info at all, not even outside
+# /src/); #3 is the first application frame, and CASR's own inline
+# symbolizer managed to resolve it even though it failed on the others.
+REAL_CRASH_LINE = f"{HARNESS}+0x38e590"
+REAL_FRAME_0 = (
+    f"    #0 0xaaaaaad... in __aarch64_cas1_acq_rel ({HARNESS}+0x38e590) (BuildId: {BUILD_ID})"
+)
+REAL_FRAME_1 = (
+    "    #1 0xaaaaaad... in __asan::Allocator::Deallocate "
+    f"({HARNESS}+0x54b7c) (BuildId: {BUILD_ID})"
+)
+REAL_FRAME_2 = f"    #2 0xaaaaaad... in free ({HARNESS}+0xf7490) (BuildId: {BUILD_ID})"
+REAL_FRAME_3 = (
+    "    #3 0xaaaaaadba97c in device_stop_k054539 "
+    "/src/libvgm/emu/cores/k054539.c:657:2"
+)
+
 
 class ParseFrameAddressesTest(unittest.TestCase):
     """Parsing BuildId and offsets out of a CrashLine / raw stack frame."""
@@ -190,6 +208,28 @@ class ResolveCrashSiteTest(unittest.TestCase):
         self.assertTrue(result.build_id_match)
         self.assertEqual(result.crash_line, RAW_CRASH_LINE)
         self.assertEqual(result.stacktrace, stacktrace)
+
+    def test_falls_back_to_a_frame_casr_already_symbolized_on_its_own(self):
+        # Real case: #0-#2 are raw and totally unresolvable (deep in the
+        # ASan allocator / libc, no debug info at all); #3 was already
+        # symbolized by CASR's own inline symbolizer. The fallback must
+        # recognize #3's already-resolved text, not just raw frames this
+        # batch resolved itself.
+        stacktrace = [REAL_FRAME_0, REAL_FRAME_1, REAL_FRAME_2, REAL_FRAME_3]
+        resolved = {"0x38e590": None, "0x54b7c": None, "0xf7490": None}
+        with patch.object(symbolize, "harness_build_id", return_value=BUILD_ID), \
+             patch.object(symbolize, "symbolize_addresses", return_value=resolved):
+            result = resolve_crash_site(REAL_CRASH_LINE, stacktrace, IMAGE, HARNESS)
+
+        self.assertTrue(result.resolved)
+        self.assertTrue(result.build_id_match)
+        self.assertEqual(result.crash_line, "/src/libvgm/emu/cores/k054539.c:657:2")
+        # raw, unresolvable frames are left untouched
+        self.assertEqual(result.stacktrace[0], REAL_FRAME_0)
+        self.assertEqual(result.stacktrace[1], REAL_FRAME_1)
+        self.assertEqual(result.stacktrace[2], REAL_FRAME_2)
+        # already-symbolized frame passes through unchanged too
+        self.assertEqual(result.stacktrace[3], REAL_FRAME_3)
 
 
 class ParseSymbolizerOutputTest(unittest.TestCase):
