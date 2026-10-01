@@ -84,6 +84,14 @@ been run over the AFL++ crash directory.
 
 - `parse_casrep()` loads each `.casrep` JSON report; the crashing input is
   the sibling file without the `.casrep` suffix (`find_original_crash_file()`).
+- `symbolize_report()` resolves `CrashLine` / `Stacktrace` in place first,
+  via `triage/symbolize.py`, for reports where ASan failed to fork
+  `llvm-symbolizer` at crash time and left them as raw `<module>+0x<offset>`
+  addresses — offline, against the harness inside `CASR_IMAGE` (the exact
+  image CASR itself just ran the crashes through), gated on a BuildId match
+  so it can never resolve against the wrong binary. See `triage/README.md`
+  for the full explanation and `triage/resymbolize_existing.py`, the one-off
+  operator script that applies the same fix to rows already in the database.
 - `crash_site()` / `compute_input_hash()` derive the dedup key: the SHA-256
   of `CrashLine` (`file:line:col`), falling back to the top stack frame with
   hexadecimal addresses stripped. One finding per crash site is the intended
@@ -100,10 +108,14 @@ been run over the AFL++ crash directory.
   `poc_file_path` is updated to that permanent location. Nothing in the
   script names a specific target.
 
-`triage/run_triage.sh` is the cron entry point that ties the two scripts
+`triage/run_triage.sh` is the cron entry point that ties the scripts
 together: it selects the active target (newest `targets` row unless
-`TARGET_ID` is set in the repo-root `.env`), runs the collector, runs
-CASR in the fuzzer image and then the ingestion.
+`TARGET_ID` is set in the repo-root `.env`), runs the collector, runs CASR
+in `CASR_IMAGE` — the AFL master container's current image, resolved fresh
+each run via `docker inspect`, falling back to the `FUZZER_IMAGE` tag only
+if that can't be resolved — and then the ingestion, passing that same
+`CASR_IMAGE` through so offline symbolization always runs against the exact
+image CASR just used.
 
 ## 4. Database — `db/`
 

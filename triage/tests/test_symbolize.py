@@ -1,0 +1,192 @@
+#!/usr/bin/env python3
+"""
+Unit tests for triage/symbolize.py. Pure parsing/decision logic only -- no
+database, and every docker/subprocess call is mocked, so this never touches
+a real container. Run with:
+
+    python3 -m unittest discover -s triage/tests
+"""
+
+import sys
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import symbolize  # noqa: E402  (after the sys.path tweak above)
+from symbolize import (  # noqa: E402
+    FRAME_MODULE_OFFSET_RE,
+    MODULE_OFFSET_RE,
+    parse_symbolizer_output,
+    resolve_crash_site,
+)
+
+IMAGE = "fuzzer-pipeline-fuzzer0@sha256:deadbeef"
+HARNESS = "/fuzzing/harness"
+BUILD_ID = "4234abcd1234abcd1234abcd1234abcd1234abcd"
+OTHER_BUILD_ID = "ffffffffffffffffffffffffffffffffffffffff"
+
+RAW_CRASH_LINE = f"{HARNESS}+0x31dcc4"
+RAW_FRAME = (
+    f"    #0 0x55d4a1b2c3d4 in some_func ({HARNESS}+0x31dcc4) (BuildId: {BUILD_ID})"
+)
+RAW_FRAME_2 = (
+    f"    #1 0x55d4a1b2c400 in caller_func ({HARNESS}+0x320000) (BuildId: {BUILD_ID})"
+)
+SYMBOLIZED_FRAME = "    #2 0x55d4a1b2c500 in main /src/libvgm/main.c:10:1"
+
+
+class ParseFrameAddressesTest(unittest.TestCase):
+    """Parsing BuildId and offsets out of a CrashLine / raw stack frame."""
+
+    def test_module_offset_crash_line(self):
+        match = MODULE_OFFSET_RE.match(RAW_CRASH_LINE)
+        self.assertIsNotNone(match)
+        self.assertEqual(match.group("path"), HARNESS)
+        self.assertEqual(match.group("offset"), "31dcc4")
+
+    def test_already_symbolized_crash_line_does_not_match(self):
+        self.assertIsNone(MODULE_OFFSET_RE.match("/src/libvgm/player/dblk_compr.c:37:15"))
+
+    def test_frame_module_offset_and_build_id(self):
+        match = FRAME_MODULE_OFFSET_RE.search(RAW_FRAME)
+        self.assertIsNotNone(match)
+        self.assertEqual(match.group("path"), HARNESS)
+        self.assertEqual(match.group("offset"), "31dcc4")
+        self.assertEqual(match.group("buildid"), BUILD_ID)
+
+    def test_symbolized_frame_has_no_module_offset_match(self):
+        self.assertIsNone(FRAME_MODULE_OFFSET_RE.search(SYMBOLIZED_FRAME))
+
+
+class ResolveCrashSiteTest(unittest.TestCase):
+    """resolve_crash_site()'s gating logic -- BuildId check and when it
+    does/doesn't touch crash_line/stacktrace."""
+
+    def test_already_symbolized_crash_line_is_left_alone(self):
+        stacktrace = [SYMBOLIZED_FRAME]
+        result = resolve_crash_site("/src/libvgm/main.c:10:1", stacktrace, IMAGE, HARNESS)
+        self.assertFalse(result.resolved)
+        self.assertIsNone(result.build_id_match)
+        self.assertEqual(result.crash_line, "/src/libvgm/main.c:10:1")
+        self.assertEqual(result.stacktrace, stacktrace)
+
+    def test_no_build_id_in_frames_is_left_unchanged(self):
+        # A raw-looking address but no "(BuildId: ...)" anywhere in the
+        # stack -- nothing to verify against, so nothing is resolved.
+        stacktrace = ["    #0 0x55d4 in some_func (/fuzzing/harness+0x31dcc4)"]
+        with patch.object(symbolize, "harness_build_id") as mock_build_id:
+            result = resolve_crash_site(RAW_CRASH_LINE, stacktrace, IMAGE, HARNESS)
+        mock_build_id.assert_not_called()
+        self.assertFalse(result.resolved)
+        self.assertIsNone(result.build_id_match)
+        self.assertEqual(result.crash_line, RAW_CRASH_LINE)
+        self.assertEqual(result.stacktrace, stacktrace)
+
+    def test_no_image_is_left_unchanged_without_touching_docker(self):
+        stacktrace = [RAW_FRAME]
+        with patch.object(symbolize, "harness_build_id") as mock_build_id:
+            result = resolve_crash_site(RAW_CRASH_LINE, stacktrace, None, HARNESS)
+        mock_build_id.assert_not_called()
+        self.assertFalse(result.resolved)
+        self.assertIsNone(result.build_id_match)
+        self.assertEqual(result.crash_line, RAW_CRASH_LINE)
+
+    def test_build_id_mismatch_leaves_crash_line_and_stacktrace_unchanged(self):
+        stacktrace = [RAW_FRAME, RAW_FRAME_2]
+        with patch.object(symbolize, "harness_build_id", return_value=OTHER_BUILD_ID) as mock_build_id, \
+             patch.object(symbolize, "symbolize_addresses") as mock_symbolize:
+            result = resolve_crash_site(RAW_CRASH_LINE, stacktrace, IMAGE, HARNESS)
+
+        mock_build_id.assert_called_once_with(IMAGE, HARNESS)
+        mock_symbolize.assert_not_called()  # a mismatch must never even attempt resolution
+        self.assertFalse(result.resolved)
+        self.assertFalse(result.build_id_match)
+        self.assertEqual(result.crash_line, RAW_CRASH_LINE)
+        self.assertEqual(result.stacktrace, stacktrace)
+        self.assertIn(OTHER_BUILD_ID, result.reason)
+        self.assertIn(BUILD_ID, result.reason)
+
+    def test_build_id_match_resolves_crash_line_and_matching_frames_in_one_call(self):
+        stacktrace = [RAW_FRAME, RAW_FRAME_2, SYMBOLIZED_FRAME]
+        resolved = {
+            "0x31dcc4": ("/src/libvgm/player/dblk_compr.c", 37, 15),
+            "0x320000": ("/src/libvgm/player/vgmplayer.c", 120, 3),
+        }
+        with patch.object(symbolize, "harness_build_id", return_value=BUILD_ID), \
+             patch.object(symbolize, "symbolize_addresses", return_value=resolved) as mock_symbolize:
+            result = resolve_crash_site(RAW_CRASH_LINE, stacktrace, IMAGE, HARNESS)
+
+        mock_symbolize.assert_called_once()  # one batched container invocation, not one per frame
+        call_args = mock_symbolize.call_args.args
+        self.assertEqual(call_args[0], IMAGE)
+        self.assertEqual(call_args[1], HARNESS)
+        self.assertEqual(sorted(call_args[2]), ["0x31dcc4", "0x320000"])
+
+        self.assertTrue(result.resolved)
+        self.assertTrue(result.build_id_match)
+        self.assertEqual(result.crash_line, "/src/libvgm/player/dblk_compr.c:37:15")
+        self.assertIn("/src/libvgm/player/dblk_compr.c:37:15", result.stacktrace[0])
+        self.assertIn("/src/libvgm/player/vgmplayer.c:120:3", result.stacktrace[1])
+        # already-symbolized frames pass through untouched
+        self.assertEqual(result.stacktrace[2], SYMBOLIZED_FRAME)
+
+    def test_build_id_match_but_symbolizer_cannot_resolve_crash_address(self):
+        stacktrace = [RAW_FRAME]
+        with patch.object(symbolize, "harness_build_id", return_value=BUILD_ID), \
+             patch.object(symbolize, "symbolize_addresses", return_value={"0x31dcc4": None}):
+            result = resolve_crash_site(RAW_CRASH_LINE, stacktrace, IMAGE, HARNESS)
+
+        self.assertFalse(result.resolved)
+        self.assertTrue(result.build_id_match)
+        self.assertEqual(result.crash_line, RAW_CRASH_LINE)
+        self.assertEqual(result.stacktrace, stacktrace)
+
+
+class ParseSymbolizerOutputTest(unittest.TestCase):
+    """Parsing llvm-symbolizer's batch stdin output, including inlined
+    frames (innermost -- the first pair in a block -- wins)."""
+
+    def test_single_non_inlined_address(self):
+        output = "not_inlined\n/src/t.c:5:35\n"
+        result = parse_symbolizer_output(output, ["0x1150"])
+        self.assertEqual(result["0x1150"], ("/src/t.c", 5, 35))
+
+    def test_inlined_chain_innermost_wins(self):
+        # Real llvm-symbolizer shape for one address with two levels of
+        # inlining: innermost function/location pair first.
+        output = (
+            "inner\n/src/t.c:3:40\n"
+            "middle\n/src/t.c:4:36\n"
+            "outer\n/src/t.c:5:21\n"
+        )
+        result = parse_symbolizer_output(output, ["0x1142"])
+        self.assertEqual(result["0x1142"], ("/src/t.c", 3, 40))
+
+    def test_batch_of_three_addresses_separated_by_blank_lines(self):
+        output = (
+            "middle\n/src/t2.c:4:51\n"
+            "outer\n/src/t2.c:5:21\n"
+            "\n"
+            "inner\n/src/t2.c:3:40\n"
+            "middle\n/src/t2.c:4:36\n"
+            "outer\n/src/t2.c:5:21\n"
+            "\n"
+            "outer\n/src/t2.c:5:37\n"
+            "\n"
+        )
+        offsets = ["0x1148", "0x1142", "0x114e"]
+        result = parse_symbolizer_output(output, offsets)
+        self.assertEqual(result["0x1148"], ("/src/t2.c", 4, 51))
+        self.assertEqual(result["0x1142"], ("/src/t2.c", 3, 40))  # innermost of its inline chain
+        self.assertEqual(result["0x114e"], ("/src/t2.c", 5, 37))
+
+    def test_unresolved_address_is_none(self):
+        output = "_end\n??:0:0\n"
+        result = parse_symbolizer_output(output, ["0xdeadbeef"])
+        self.assertIsNone(result["0xdeadbeef"])
+
+
+if __name__ == "__main__":
+    unittest.main()

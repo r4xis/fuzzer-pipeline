@@ -14,6 +14,8 @@ from pathlib import Path
 
 import psycopg2
 
+from symbolize import resolve_crash_site
+
 FUZZER_DB_PASSWORD = os.environ.get("FUZZER_DB_PASSWORD")
 if not FUZZER_DB_PASSWORD:
     raise RuntimeError("FUZZER_DB_PASSWORD environment variable is required")
@@ -29,6 +31,15 @@ DB_CONFIG = {
 # PoC inputs are archived under <root>/<focus>/, so the directory follows the
 # target instead of being edited on every switch.
 POC_ARCHIVE_ROOT = Path(os.environ.get("POC_ARCHIVE_ROOT", "/data/poc_archive"))
+
+# The harness path inside the fuzzer image, and the image itself -- set by
+# run_triage.sh to the exact image CASR just ran the crashes through, so
+# offline symbolization always matches the binary that produced them (a
+# report's addresses and BuildId are only ever valid against that one
+# image). Unset CASR_IMAGE just means symbolization is skipped; reports
+# keep their raw CrashLine/Stacktrace.
+HARNESS_PATH = os.environ.get("HARNESS", "/fuzzing/harness")
+CASR_IMAGE = os.environ.get("CASR_IMAGE") or None
 
 HEX_ADDRESS_RE = re.compile(r"0x[0-9a-fA-F]+")
 
@@ -84,6 +95,27 @@ def session_focus(conn, session_id: int) -> str:
 def parse_casrep(casrep_path: Path) -> dict:
     with open(casrep_path, "r") as f:
         return json.load(f)
+
+
+def symbolize_report(report: dict, label: str) -> dict:
+    """Resolves report['CrashLine']/['Stacktrace'] in place when they are
+    raw module+offset addresses CASR couldn't symbolize at crash time (see
+    symbolize.py); otherwise returns report unchanged. Always logs why a
+    report that needed it wasn't resolved."""
+    result = resolve_crash_site(
+        report.get("CrashLine", ""), report.get("Stacktrace", []), CASR_IMAGE, HARNESS_PATH
+    )
+    if result.reason == "CrashLine is not a raw module+offset address":
+        return report
+
+    if result.resolved:
+        print(f"  [symbolize] {label}: {report.get('CrashLine')!r} -> {result.crash_line!r}")
+        report["CrashLine"] = result.crash_line
+        report["Stacktrace"] = result.stacktrace
+    else:
+        print(f"  [symbolize] {label}: keeping raw CrashLine {report.get('CrashLine')!r}: {result.reason}")
+
+    return report
 
 
 def find_original_crash_file(casrep_path: Path) -> Path:
@@ -159,6 +191,7 @@ def main():
 
     for casrep_path in casrep_files:
         report = parse_casrep(casrep_path)
+        report = symbolize_report(report, casrep_path.name)
         original_crash = find_original_crash_file(casrep_path)
 
         if not original_crash.exists():
