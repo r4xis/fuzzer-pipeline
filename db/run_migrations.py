@@ -14,12 +14,16 @@ import psycopg2
 
 MIGRATIONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "migrations")
 
+FUZZER_DB_PASSWORD = os.environ.get("FUZZER_DB_PASSWORD")
+if not FUZZER_DB_PASSWORD:
+    raise RuntimeError("FUZZER_DB_PASSWORD environment variable is required")
+
 DB_CONFIG = {
     "host": os.environ.get("DB_HOST", "127.0.0.1"),
     "port": int(os.environ.get("DB_PORT", 5432)),
     "dbname": "fuzzer_db",
     "user": "fuzzer",
-    "password": os.environ.get("FUZZER_DB_PASSWORD", ""),
+    "password": FUZZER_DB_PASSWORD,
 }
 
 MIGRATION_RE = re.compile(r"^(\d+)_.+\.sql$")

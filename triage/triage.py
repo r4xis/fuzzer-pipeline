@@ -14,12 +14,16 @@ from pathlib import Path
 
 import psycopg2
 
+FUZZER_DB_PASSWORD = os.environ.get("FUZZER_DB_PASSWORD")
+if not FUZZER_DB_PASSWORD:
+    raise RuntimeError("FUZZER_DB_PASSWORD environment variable is required")
+
 DB_CONFIG = {
     "host": os.environ.get("DB_HOST", "127.0.0.1"),
     "port": int(os.environ.get("DB_PORT", 5432)),
     "dbname": "fuzzer_db",
     "user": "fuzzer",
-    "password": os.environ.get("FUZZER_DB_PASSWORD", ""),
+    "password": FUZZER_DB_PASSWORD,
 }
 
 # PoC inputs are archived under <root>/<focus>/, so the directory follows the
