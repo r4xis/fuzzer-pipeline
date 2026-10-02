@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import ApiUnreachable from "./ApiUnreachable";
 
 // "<found> · <public> pub.", always both, so a fresh target reads "0 · 0 pub."
@@ -6,11 +7,40 @@ function countLabel(c) {
   return `${c.total} · ${c.public} pub.`;
 }
 
+// Swipe-left-to-close on touch devices. Tracked as a plain ref (not state) so
+// the gesture adds no re-renders; only closes once a touch moves left past
+// the threshold AND more horizontally than vertically, so swiping vertically
+// to scroll the drawer's own content is never mistaken for a close gesture.
+const SWIPE_CLOSE_PX = 50;
+
+function useSwipeToClose(onClose) {
+  const start = useRef(null);
+  const onTouchStart = (e) => {
+    const t = e.touches[0];
+    start.current = { x: t.clientX, y: t.clientY };
+  };
+  const onTouchMove = (e) => {
+    if (!start.current) return;
+    const t = e.touches[0];
+    const dx = t.clientX - start.current.x;
+    const dy = t.clientY - start.current.y;
+    if (dx <= -SWIPE_CLOSE_PX && Math.abs(dx) > Math.abs(dy)) {
+      start.current = null;
+      onClose();
+    }
+  };
+  const onTouchEnd = () => {
+    start.current = null;
+  };
+  return { onTouchStart, onTouchMove, onTouchEnd };
+}
+
 export default function Sidebar({ tree, treeError, counts, fleetById, onRetry, selection, onSelectProgram, onSelectTarget, open, onClose }) {
+  const swipe = useSwipeToClose(onClose);
   return (
     <>
       <div className={`sidebar-backdrop ${open ? "open" : ""}`} onClick={onClose} />
-      <aside className={`sidebar ${open ? "open" : ""}`}>
+      <aside className={`sidebar ${open ? "open" : ""}`} {...swipe}>
         <div className="nav-section-label">Programs / targets</div>
         {treeError && !tree && (
           <div className="nav-notice">

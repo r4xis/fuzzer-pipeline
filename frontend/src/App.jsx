@@ -29,6 +29,12 @@ export default function App() {
   const [selection, setSelection] = useState({ programId: null, targetId: null, crashId: null });
   const [navOpen, setNavOpen] = useState(false);
 
+  // The page behind the mobile nav drawer must not scroll while it's open.
+  useEffect(() => {
+    document.body.classList.toggle("nav-locked", navOpen);
+    return () => document.body.classList.remove("nav-locked");
+  }, [navOpen]);
+
   useEffect(() => {
     let alive = true;
     fetchProgramTree()

@@ -24,6 +24,13 @@
   --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --sidebar-w: 18rem;
+  /* .site-header's mobile row height: 2x its 0.75rem padding + a 1.6rem text
+     line-height + its 1px border — the exact values its <=860px rule uses
+     below, so .site-header is given this SAME variable as its own height.
+     The drawer and its backdrop (also anchored to this variable) can then
+     never diverge from where the header actually ends, even if the root
+     font-size knob changes how tall the header renders. */
+  --mobile-header-h: calc(1.5rem + 1.6rem + 1px);
 
   /* Single scale knob: every other size in this file is in rem (or px for
      hairline borders / icon glyphs that should stay crisp), so bumping this
@@ -33,7 +40,16 @@
 
 * { box-sizing: border-box; }
 
+img, svg { max-width: 100%; }
+
 html, body { height: 100%; }
+
+/* Safety net only: real offenders (long names, wide tables/code blocks,
+   oversized media) are fixed at the source — see .table-wrap, .code-block,
+   img/svg below and the mobile sidebar rules. This just clips whatever
+   residual sub-pixel overflow slips through (e.g. an absolutely positioned
+   popover's own layout box) so the page itself can never be dragged sideways. */
+html, body { overflow-x: clip; }
 
 body {
   margin: 0;
@@ -43,8 +59,10 @@ body {
   font-size: 1rem;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
 }
+
+/* While the mobile nav drawer is open, the page behind it must not scroll. */
+body.nav-locked { overflow: hidden; }
 
 a { color: var(--info); text-decoration: none; }
 a:hover { text-decoration: underline; }
@@ -1031,7 +1049,7 @@ button { font: inherit; color: inherit; }
       "main"
       "footer";
   }
-  .site-header { padding: 0.75rem 1rem; gap: 0.625rem; flex-wrap: nowrap; }
+  .site-header { height: var(--mobile-header-h); padding: 0.75rem 1rem; gap: 0.625rem; flex-wrap: nowrap; }
   .brand { flex: 1 1 auto; min-width: 0; gap: 0.625rem; }
   .brand-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .brand-sub { display: none; }
@@ -1043,10 +1061,14 @@ button { font: inherit; color: inherit; }
 
   .sidebar {
     position: fixed;
-    top: 0;
+    top: var(--mobile-header-h);
     left: 0;
-    bottom: 0;
     width: min(84vw, 320px);
+    /* dvh accounts for the mobile address bar; vh is the fallback for
+       browsers that don't support it, so the drawer always reaches the
+       true bottom of the screen instead of being cut short. */
+    height: calc(100vh - var(--mobile-header-h));
+    height: calc(100dvh - var(--mobile-header-h));
     max-height: none;
     z-index: 30;
     transform: translateX(-100%);
@@ -1057,7 +1079,10 @@ button { font: inherit; color: inherit; }
   .sidebar-backdrop.open {
     display: block;
     position: fixed;
-    inset: 0;
+    top: var(--mobile-header-h);
+    left: 0;
+    right: 0;
+    bottom: 0;
     background: rgba(0, 0, 0, 0.55);
     z-index: 20;
   }
