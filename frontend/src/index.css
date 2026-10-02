@@ -342,8 +342,14 @@ button { font: inherit; color: inherit; }
   border-left-color: var(--phosphor);
   background: var(--surface);
 }
-.nav-target-focus { font-weight: 500; }
-.nav-target-meta { font-size: 0.66rem; color: var(--text-faint); }
+.nav-target-focus {
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nav-target-meta { font-size: 0.66rem; color: var(--text-faint); white-space: nowrap; }
 
 .sidebar-backdrop { display: none; }
 
@@ -729,9 +735,15 @@ button { font: inherit; color: inherit; }
 }
 .row-btn:hover { background: var(--surface); }
 
-.target-row { grid-template-columns: 4.375rem 1fr auto auto; }
-.target-row .focus { font-weight: 500; }
-.target-row .since { color: var(--text-muted); font-size: 0.76rem; }
+.target-row { grid-template-columns: 1fr auto auto auto; }
+.target-row .focus {
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.target-row .since { color: var(--text-muted); font-size: 0.76rem; white-space: nowrap; }
 .target-row .count { color: var(--text-muted); font-size: 0.76rem; white-space: nowrap; }
 .target-row .arrow { color: var(--text-faint); }
 
@@ -1046,7 +1058,7 @@ button { font: inherit; color: inherit; }
   .site-footer { padding: 1.25rem 1rem 1.75rem; }
   .kv { grid-template-columns: 1fr; row-gap: 0.125rem; }
   .kv dt { margin-top: 0.5rem; }
-  .target-row { grid-template-columns: 3.75rem 1fr auto; }
+  .target-row { grid-template-columns: 1fr auto auto; }
   .target-row .since { display: none; }
   .target-head { align-items: stretch; }
   .trace-strip { max-width: none; }
