@@ -19,6 +19,14 @@ function LinkedInIcon() {
   );
 }
 
+function MenuIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+      <path d="M2 4.5h12M2 8h12M2 11.5h12" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function liveLabel(liveState, hasSession) {
   if (liveState === "live") return "Live";
   if (liveState === "closed") return "Closed";
@@ -68,8 +76,8 @@ export default function Header({ liveState, latestAt, hasSession, scope, targets
   return (
     <header className="site-header">
       <div className="brand">
-        <button className="menu-btn" onClick={onToggleMenu} aria-label="Toggle navigation">
-          Nav
+        <button className="menu-btn" onClick={onToggleMenu} aria-label="Open navigation">
+          <MenuIcon />
         </button>
         <h1 className="brand-title">
           <a href="/" onClick={goHome}>Crash Disclosure</a>
