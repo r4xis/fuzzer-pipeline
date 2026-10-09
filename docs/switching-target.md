@@ -10,7 +10,7 @@ automatically, and the PoC archive directory follows the target's `focus`.
 
 | Layer | Target-specific? | Where |
 | --- | --- | --- |
-| Harness source and instrumented build | yes | `harness/`, `Dockerfile` |
+| Harness source and instrumented build | yes | `harness/`, `Dockerfile.<lib>` |
 | Seed corpus and AFL++ command line | yes | `docker-compose.yml` (`-i /data/<seeds>`) |
 | AFL++ output directory | per campaign | `/data/afl-output` |
 | Program / target registration | data | `programs`, `targets` tables |
@@ -21,11 +21,14 @@ automatically, and the PoC archive directory follows the target's `focus`.
 
 ### 1. Prepare the harness and image
 
-- Put the new harness under `harness/` and point the `COPY` / compile lines
-  in the root `Dockerfile` at it. If the library itself changes, update the
-  clone/build steps in the same file.
+- Put the new harness under `harness/`. If the library itself is changing
+  too, add a new `Dockerfile.<lib>` (don't edit the outgoing target's in
+  place — keep it, named the same way, in case the pipeline comes back to
+  that library) with the clone/build steps and the `COPY` / compile lines
+  pointed at the new harness; if only the harness changes against the same
+  library, update the existing `Dockerfile.<lib>`.
 - Put the seed corpus under `/data/<name>` on the host and set the `-i`
-  path in every `fuzzer*` service of `docker-compose.yml`.
+  path and `dockerfile:` in every `fuzzer*` service of `docker-compose.yml`.
 
 ### 2. Stop the running campaign and keep its output apart
 

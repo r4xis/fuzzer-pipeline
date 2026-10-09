@@ -9,11 +9,16 @@ Diagrams (regenerate with `python3 docs/diagrams/generate_diagrams.py`):
 - ![Database schema](diagrams/db-schema.png)
 - ![Frontend structure](diagrams/frontend-components.png)
 
-## 1. Fuzzing cluster — `Dockerfile`, `docker-compose.yml`
+## 1. Fuzzing cluster — `Dockerfile.libvgm`, `docker-compose.yml`
 
-The root `Dockerfile` builds the fuzzing image: it fetches the target
-library, compiles it with AFL++ instrumentation (`afl-cc` / `afl-c++`) and
-links the harness source from `harness/` against that instrumented build as
+Each target has its own `Dockerfile.<lib>` (currently `Dockerfile.libvgm`;
+see [switching the target](switching-target.md) for how this changes when
+the target does); earlier targets' Dockerfiles are kept around rather than
+deleted, named the same way (e.g. `Dockerfile.libgme`, orphaned since the
+NSF→VGM switch), in case the pipeline points at that library again. The
+active one builds the fuzzing image: it fetches the target library, compiles
+it with AFL++ instrumentation (`afl-cc` / `afl-c++`) and links the harness
+source from `harness/` against that instrumented build as
 `/fuzzing/harness`. `docker-compose.yml` runs four
 instances of that image plus the database and the API:
 

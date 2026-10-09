@@ -12,7 +12,7 @@ jobs:
       - name: SSH and deploy
         uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262 # v1.0.3
         with:
-          host: 79.72.66.118
+          host: ${{ secrets.ORACLE_HOST }}
           username: opc
           key: ${{ secrets.ORACLE_SSH_KEY }}
           fingerprint: ${{ secrets.ORACLE_HOST_FINGERPRINT }}

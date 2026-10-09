@@ -37,9 +37,11 @@ without changing the code.
 ```
 
 1. **Fuzzing** — `docker-compose.yml` runs one AFL++ master and three
-   secondaries against the harness built by the root `Dockerfile`. All
-   instances share `/data`, where AFL++ keeps its output directory and the
-   seed corpus lives.
+   secondaries against the harness built by the active target's
+   `Dockerfile.<lib>` (currently `Dockerfile.libvgm`; see
+   [switching the target](docs/switching-target.md)). All instances share
+   `/data`, where AFL++ keeps its output directory and the seed corpus
+   lives.
 2. **Statistics** — every 15 minutes a cron job runs
    `triage/update_session_stats.py`, which parses `afl-whatsup` and appends a
    coverage/exec-count reading for the session and one reading per fuzzer
@@ -59,7 +61,7 @@ without changing the code.
 
 | Path | Purpose |
 | --- | --- |
-| `Dockerfile`, `docker-compose.yml` | Harness/fuzzer image and the fuzzer + database + API services |
+| `Dockerfile.libvgm`, `docker-compose.yml` | Harness/fuzzer image and the fuzzer + database + API services |
 | `api/` | FastAPI service exposing programs, targets, sessions, findings and PoC downloads ([README](api/README.md)) |
 | `triage/` | Cron-driven collectors: coverage/instance statistics and CASR crash ingestion ([README](triage/README.md)) |
 | `db/` | Numbered SQL migrations and the migration runner ([README](db/README.md)) |
