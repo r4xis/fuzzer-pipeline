@@ -76,9 +76,12 @@ docker compose build
 docker compose up -d
 ```
 
-Committing and pushing the harness/compose changes also rebuilds the images
-on the host through the deploy workflow, but starting the fuzzers is a
-manual step by design.
+Committing and pushing the harness/compose changes updates the host's git
+checkout (the deploy workflow does `git fetch` + `merge --ff-only` there),
+but it does not build or restart the fuzzer images — `deploy.yml` only
+builds and recreates the `api` service, deliberately, so a push can never
+kill a running AFL++ campaign. `docker compose build` and `docker compose
+up -d` below are manual steps you run on the host yourself.
 
 ### 5. Check the first cron run (within 15 minutes)
 

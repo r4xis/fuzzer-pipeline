@@ -1,0 +1,56 @@
+FROM aflplusplus/aflplusplus:latest
+
+RUN apt-get update && apt-get install -y \
+    git \
+    gdb \
+    libxml2-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# CASR for crash triage - base image already has Rust/cargo installed
+RUN cargo install casr
+
+# Shallow-pinned: a plain `git clone --depth 1` can't check out an older
+# commit (history isn't there), so this fetches the exact pinned SHA at
+# depth 1 instead -- same bandwidth/disk cost, reproducible build. This is
+# the commit the harness was developed and locally tested against.
+ARG AFDKO_COMMIT=c53bdc6d489942d48c9d83d22ed02e2973d40637
+
+WORKDIR /fuzzing
+RUN git init /src/afdko && \
+    cd /src/afdko && \
+    git remote add origin https://github.com/adobe-type-tools/afdko && \
+    git fetch --depth 1 origin "$AFDKO_COMMIT" && \
+    git checkout FETCH_HEAD
+
+# We do NOT build all of AFDKO (no cmake/python tooling needed): the harness
+# only exercises 13 files under c/shared, compiled directly. .c files must
+# be compiled as C and .cpp files (+ the harness) as C++ -- smem.c declares
+# a variable named `new`, a C++ keyword, so compiling it as C++ fails; going
+# the other way, cffread_abs.cpp pulls in C++ headers that fail as C.
+COPY harness/fuzz_afdko_cff2.cpp /fuzzing/
+
+# afl-clang-fast(++) + AFL_USE_ASAN=1 inline on the build/link commands only
+# (never as a persistent ENV, so it can't leak into unrelated steps).
+# -fsanitize=undefined is on top of AFL_USE_ASAN's ASAN: AFL++ has no
+# AFL_USE_UBSAN equivalent, so UBSAN has to be requested as a raw flag.
+# AFL_HARDEN=1 matches the AFL build this harness was locally validated
+# with (see build_cff2.sh).
+RUN cd /src/afdko && \
+    INC="-Ic/shared/include -Ic/shared -Ic/shared/resource -Ic/shared/cffwrite -Ic/shared/absfont -Ic/shared/support $(xml2-config --cflags)" && \
+    C_SRCS="c/shared/ctutil.c c/shared/dynarr.c c/shared/support/except.c c/shared/support/fixed.c c/shared/smem.c c/shared/sha1.c" && \
+    CPP_SRCS="c/shared/cffread_abs.cpp c/shared/sfntread.cpp c/shared/t2cstr.cpp c/shared/varsupport.cpp c/shared/namesupport.cpp c/shared/absfont/absfont.cpp c/shared/slogger.cpp" && \
+    mkdir -p /fuzzing/obj && \
+    for s in $C_SRCS; do \
+        AFL_HARDEN=1 AFL_USE_ASAN=1 afl-clang-fast -g -O1 -fsanitize=undefined $INC -c "$s" -o "/fuzzing/obj/$(basename "$s" .c).o"; \
+    done && \
+    for s in $CPP_SRCS; do \
+        AFL_HARDEN=1 AFL_USE_ASAN=1 afl-clang-fast++ -g -O1 -std=c++17 -fsanitize=undefined $INC -c "$s" -o "/fuzzing/obj/$(basename "$s" .cpp).o"; \
+    done && \
+    AFL_HARDEN=1 AFL_USE_ASAN=1 afl-clang-fast++ -g -O1 -std=c++17 -fsanitize=undefined $INC \
+        -c /fuzzing/fuzz_afdko_cff2.cpp -o /fuzzing/obj/harness.o && \
+    AFL_HARDEN=1 AFL_USE_ASAN=1 afl-clang-fast++ -fsanitize=undefined \
+        /fuzzing/obj/*.o -lm -lxml2 -o /fuzzing/harness
+
+RUN echo "afdko_commit=$AFDKO_COMMIT" > /fuzzing/BUILD_INFO
+
+VOLUME ["/data"]
