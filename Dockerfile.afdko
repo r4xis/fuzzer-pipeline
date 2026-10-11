@@ -31,8 +31,13 @@ COPY harness/fuzz_afdko_cff2.cpp /fuzzing/
 
 # afl-clang-fast(++) + AFL_USE_ASAN=1 inline on the build/link commands only
 # (never as a persistent ENV, so it can't leak into unrelated steps).
-# -fsanitize=undefined is on top of AFL_USE_ASAN's ASAN: AFL++ has no
-# AFL_USE_UBSAN equivalent, so UBSAN has to be requested as a raw flag.
+# UBSAN (-fsanitize=undefined) is deliberately NOT enabled: AFDKO's generic
+# void* callbacks and fixed-point shifts trigger harmless UB (e.g. "call
+# through pointer to incorrect function type" in dynarr.c) all over the
+# codebase on inputs that parse correctly. With UBSAN_OPTIONS=abort_on_error,
+# AFL treats that as a crash on the seed corpus and aborts with "need at
+# least one valid seed that does not crash". ASAN catches real memory
+# errors and is enough for this target.
 # AFL_HARDEN=1 is NOT used here (unlike build_cff2.sh): afl-cc refuses it
 # together with AFL_USE_ASAN ("ASAN and AFL_HARDEN are mutually exclusive",
 # src/afl-cc.c) -- ASAN already covers what hardening would add.
@@ -42,14 +47,14 @@ RUN cd /src/afdko && \
     CPP_SRCS="c/shared/cffread_abs.cpp c/shared/sfntread.cpp c/shared/t2cstr.cpp c/shared/varsupport.cpp c/shared/namesupport.cpp c/shared/absfont/absfont.cpp c/shared/slogger.cpp" && \
     mkdir -p /fuzzing/obj && \
     for s in $C_SRCS; do \
-        AFL_USE_ASAN=1 afl-clang-fast -g -O1 -fsanitize=undefined $INC -c "$s" -o "/fuzzing/obj/$(basename "$s" .c).o"; \
+        AFL_USE_ASAN=1 afl-clang-fast -g -O1 $INC -c "$s" -o "/fuzzing/obj/$(basename "$s" .c).o"; \
     done && \
     for s in $CPP_SRCS; do \
-        AFL_USE_ASAN=1 afl-clang-fast++ -g -O1 -std=c++17 -fsanitize=undefined $INC -c "$s" -o "/fuzzing/obj/$(basename "$s" .cpp).o"; \
+        AFL_USE_ASAN=1 afl-clang-fast++ -g -O1 -std=c++17 $INC -c "$s" -o "/fuzzing/obj/$(basename "$s" .cpp).o"; \
     done && \
-    AFL_USE_ASAN=1 afl-clang-fast++ -g -O1 -std=c++17 -fsanitize=undefined $INC \
+    AFL_USE_ASAN=1 afl-clang-fast++ -g -O1 -std=c++17 $INC \
         -c /fuzzing/fuzz_afdko_cff2.cpp -o /fuzzing/obj/harness.o && \
-    AFL_USE_ASAN=1 afl-clang-fast++ -fsanitize=undefined \
+    AFL_USE_ASAN=1 afl-clang-fast++ \
         /fuzzing/obj/*.o -lm -lxml2 -o /fuzzing/harness
 
 RUN echo "afdko_commit=$AFDKO_COMMIT" > /fuzzing/BUILD_INFO
